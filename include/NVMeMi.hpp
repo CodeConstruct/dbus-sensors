@@ -77,4 +77,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     std::thread thread;
 
     void post(std::function<void(void)>&& func);
+    void setupMtu();
+    bool findMiPort(uint8_t& port, uint16_t& max_mtu);
 };

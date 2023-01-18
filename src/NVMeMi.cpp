@@ -61,6 +61,8 @@ NVMeMi::NVMeMi(boost::asio::io_context& io, sdbusplus::bus_t& dbus, int bus,
                                  std::to_string(eid));
     }
 
+    setupMtu();
+
     // start worker thread
     workerStop = false;
     thread = std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
@@ -103,6 +105,119 @@ NVMeMi::~NVMeMi()
     }
 
     // TODO: delete mctp ep from mctpd
+}
+
+// Finds the MI port corresponding to SMBus.
+// Returns true on success, returning port and max mtu
+bool NVMeMi::findMiPort(uint8_t& retPort, uint16_t& retMaxMtu)
+{
+    int rc;
+
+    /* query number of ports */
+    struct nvme_mi_read_nvm_ss_info ssInfo;
+    rc = nvme_mi_mi_read_mi_data_subsys(nvmeEP, &ssInfo);
+    if (rc)
+    {
+        std::cerr << "findMiPort failed reading subsystem info: "
+                  << std::strerror(errno) << std::endl;
+        return false;
+    }
+
+    bool found = false;
+    for (uint8_t port = 0; port <= ssInfo.nump; port++)
+    {
+        struct nvme_mi_read_port_info portInfo;
+        rc = nvme_mi_mi_read_mi_data_port(nvmeEP, port, &portInfo);
+        if (rc)
+        {
+            std::cerr << "findMiPort failed reading port info\n";
+            return false;
+        }
+
+        /* skip non-SMBus ports */
+        if (portInfo.portt != 0x2)
+            continue;
+
+        if (found)
+        {
+            std::cerr << "Multiple SMBus ports found; skipping duplicate\n";
+        }
+        else
+        {
+            retMaxMtu = portInfo.mmctptus;
+            retPort = port;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+void NVMeMi::setupMtu()
+{
+    uint8_t port;
+    uint16_t maxMtu, curMtu;
+    int rc;
+
+    if (!findMiPort(port, maxMtu))
+    {
+        return;
+    }
+
+    rc = nvme_mi_mi_config_get_mctp_mtu(nvmeEP, port, &curMtu);
+    if (rc)
+    {
+        curMtu = 0;
+        std::cerr << "Can't query current NVMeMI MTU, ignoring\n";
+    }
+
+    if (maxMtu != curMtu)
+    {
+        rc = nvme_mi_mi_config_set_mctp_mtu(nvmeEP, port, maxMtu);
+        if (rc == 0)
+        {
+            curMtu = maxMtu;
+        }
+        else
+        {
+            std::cerr << "Can't set NVMeMI MTU, ignoring\n";
+        }
+    }
+
+    if (curMtu != 0)
+    {
+        int i = 0;
+        for (;; i++)
+        {
+            try
+            {
+                auto path = std::string("/xyz/openbmc_project/mctp/") +
+                            std::to_string(nid) + "/" + std::to_string(eid);
+                auto msg = dbus.new_method_call(
+                    "xyz.openbmc_project.MCTP", path.c_str(),
+                    "au.com.CodeConstruct.MCTP.Endpoint", "SetMTU");
+
+                // MCTP MTU includes the a header
+                uint32_t mctpMtu = curMtu + 4;
+                msg.append(mctpMtu);
+                auto reply = msg.call(); // throw SdBusError
+                break;
+            }
+            catch (const std::exception& e)
+            {
+                if (i < 5)
+                {
+                    std::cerr << "retry to SetMtu: " << e.what() << std::endl;
+                }
+                else
+                {
+                    throw std::runtime_error(e.what());
+                }
+            }
+        }
+        std::cerr << "For net " << nid << " eid " << (int)eid
+                  << " NVMeMI MTU is set to " << curMtu << std::endl;
+    }
 }
 
 void NVMeMi::post(std::function<void(void)>&& func)
