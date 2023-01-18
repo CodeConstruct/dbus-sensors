@@ -1,9 +1,10 @@
 
 #pragma once
 
+#include "AsioWorkPool.hpp"
 #include "NVMeIntf.hpp"
 
-#include <boost/asio/io_context.hpp>
+#include <boost/asio.hpp>
 #include <sdbusplus/asio/connection.hpp>
 #include <sdbusplus/asio/object_server.hpp>
 #include <xyz/openbmc_project/Inventory/Item/StorageController/server.hpp>
@@ -20,11 +21,12 @@ class NVMeController :
 
 {
   public:
-    NVMeController(boost::asio::io_context& io,
-                   sdbusplus::asio::object_server& objServer,
-                   std::shared_ptr<sdbusplus::asio::connection> conn,
-                   std::string path, std::shared_ptr<NVMeMiIntf> nvmeIntf,
-                   nvme_mi_ctrl_t ctrl);
+    static std::shared_ptr<NVMeController>
+        create(boost::asio::io_context& io,
+               sdbusplus::asio::object_server& objServer,
+               std::shared_ptr<sdbusplus::asio::connection> conn,
+               std::shared_ptr<AsioWorkPool> pool, std::string path,
+               std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl);
 
     ~NVMeController() override;
 
@@ -58,6 +60,7 @@ class NVMeController :
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;
     std::shared_ptr<sdbusplus::asio::connection> conn;
+    std::shared_ptr<AsioWorkPool> pool;
     std::string path;
 
     std::shared_ptr<NVMeMiIntf> nvmeIntf;
@@ -69,6 +72,13 @@ class NVMeController :
 
     // NVMe Plug-in for vendor defined command/field
     std::weak_ptr<NVMeControllerPlugin> plugin;
+
+    NVMeController(boost::asio::io_context& io,
+                   sdbusplus::asio::object_server& objServer,
+                   std::shared_ptr<sdbusplus::asio::connection> conn,
+                   std::shared_ptr<AsioWorkPool> pool, std::string path,
+                   std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl);
+    void init();
 
     /* NVMeAdmin method overload */
 

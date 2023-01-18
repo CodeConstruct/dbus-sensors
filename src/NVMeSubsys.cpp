@@ -41,10 +41,12 @@ static double getTemperatureReading(int8_t reading)
 NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
                              sdbusplus::asio::object_server& objServer,
                              std::shared_ptr<sdbusplus::asio::connection> conn,
+                             std::shared_ptr<AsioWorkPool> pool,
                              const std::string& path, const std::string& name,
                              const std::shared_ptr<NVMeIntf>& intf) :
     io(io),
-    objServer(objServer), conn(conn), path(path), name(name), nvmeIntf(intf),
+    objServer(objServer), conn(conn), pool(pool), path(path), name(name),
+    nvmeIntf(intf),
     storage(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str()),
     drive(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str())
 {
@@ -109,12 +111,12 @@ void NVMeSubsystem::start(const SensorData& configData)
                 std::filesystem::path path = std::filesystem::path(self->path) /
                                              "controllers" /
                                              std::to_string(*index);
-                                             
+
                 try
                 {
-                    auto nvmeController = std::make_shared<NVMeController>(
-                        self->io, self->objServer, self->conn, path.string(),
-                        nvme, c);
+                    auto nvmeController = NVMeController::create(
+                        self->io, self->objServer, self->conn, self->pool,
+                        path.string(), nvme, c);
 
                     // insert the controllers with empty plugin
                     auto [iter, _] = self->controllers.insert(

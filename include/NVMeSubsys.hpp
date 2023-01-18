@@ -1,4 +1,5 @@
 #pragma once
+#include "AsioWorkPool.hpp"
 #include "NVMeBasic.hpp"
 #include "NVMeController.hpp"
 #include "NVMeDrive.hpp"
@@ -19,7 +20,8 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     NVMeSubsystem(boost::asio::io_context& io,
                   sdbusplus::asio::object_server& objServer,
                   std::shared_ptr<sdbusplus::asio::connection> conn,
-                  const std::string& path, const std::string& name,
+                  std::shared_ptr<AsioWorkPool> pool, const std::string& path,
+                  const std::string& name,
                   const std::shared_ptr<NVMeIntf>& intf);
 
     void start(const SensorData& configData);
@@ -31,6 +33,7 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;
     std::shared_ptr<sdbusplus::asio::connection> conn;
+    std::shared_ptr<AsioWorkPool> pool;
     std::string path;
     std::string name;
 

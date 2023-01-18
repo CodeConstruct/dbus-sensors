@@ -14,6 +14,7 @@
 // limitations under the License.
 */
 
+#include "AsioWorkPool.hpp"
 #include "NVMeBasic.hpp"
 #include "NVMeMi.hpp"
 #include "NVMeSubsys.hpp"
@@ -26,6 +27,8 @@
 // a map with key value of {path, NVMeSubsystem}
 using NVMEMap = std::map<std::string, std::shared_ptr<NVMeSubsystem>>;
 static NVMEMap nvmeSubsysMap;
+
+const size_t NVME_THREADPOOL_SIZE = 10;
 
 static std::optional<int>
     extractBusNumber(const std::string& path,
@@ -84,6 +87,7 @@ static std::optional<std::string>
 static void handleConfigurations(
     boost::asio::io_service& io, sdbusplus::asio::object_server& objectServer,
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
+    std::shared_ptr<AsioWorkPool> pool,
     const ManagedObjectType& nvmeConfigurations)
 {
     // todo: it'd be better to only update the ones we care about
@@ -139,7 +143,7 @@ static void handleConfigurations(
                     new NVMeBasic(io, *busNumber, *address)};
 
                 auto nvmeSubsys = std::make_shared<NVMeSubsystem>(
-                    io, objectServer, dbusConnection, interfacePath,
+                    io, objectServer, dbusConnection, pool, interfacePath,
                     *sensorName, nvmeBasic);
                 nvmeSubsysMap.emplace(interfacePath, nvmeSubsys);
                 nvmeSubsys->start(configData);
@@ -166,7 +170,7 @@ static void handleConfigurations(
                     *busNumber, *address)};
 
                 auto nvmeSubsys = std::make_shared<NVMeSubsystem>(
-                    io, objectServer, dbusConnection, interfacePath,
+                    io, objectServer, dbusConnection, pool, interfacePath,
                     *sensorName, nvmeMi);
                 nvmeSubsysMap.emplace(interfacePath, nvmeSubsys);
                 nvmeSubsys->start(configData);
@@ -184,13 +188,14 @@ static void handleConfigurations(
 
 void createNVMeSubsystems(
     boost::asio::io_service& io, sdbusplus::asio::object_server& objectServer,
-    std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
+    std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
+    std::shared_ptr<AsioWorkPool> pool)
 {
 
     auto getter = std::make_shared<GetSensorConfiguration>(
-        dbusConnection, [&io, &objectServer, &dbusConnection](
-                            const ManagedObjectType& nvmeConfigurations) {
-            handleConfigurations(io, objectServer, dbusConnection,
+        dbusConnection, [&io, &objectServer, &dbusConnection,
+                         pool](const ManagedObjectType& nvmeConfigurations) {
+            handleConfigurations(io, objectServer, dbusConnection, pool,
                                  nvmeConfigurations);
         });
     getter->getConfiguration(
@@ -233,12 +238,14 @@ int main()
     auto systemBus = std::make_shared<sdbusplus::asio::connection>(io);
     systemBus->request_name("xyz.openbmc_project.NVMe");
     sdbusplus::asio::object_server objectServer(systemBus);
+    auto pool = std::make_shared<AsioWorkPool>(NVME_THREADPOOL_SIZE);
 
-    io.post([&]() { createNVMeSubsystems(io, objectServer, systemBus); });
+    io.post([&]() { createNVMeSubsystems(io, objectServer, systemBus, pool); });
 
     boost::asio::deadline_timer filterTimer(io);
     std::function<void(sdbusplus::message_t&)> eventHandler =
-        [&filterTimer, &io, &objectServer, &systemBus](sdbusplus::message_t&) {
+        [&filterTimer, &io, &objectServer, &systemBus,
+         pool](sdbusplus::message_t&) {
         // this implicitly cancels the timer
         filterTimer.expires_from_now(boost::posix_time::seconds(1));
 
@@ -254,7 +261,7 @@ int main()
                 return;
             }
 
-            createNVMeSubsystems(io, objectServer, systemBus);
+            createNVMeSubsystems(io, objectServer, systemBus, pool);
         });
     };
 
