@@ -7,6 +7,8 @@
 
 nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
+constexpr size_t maxNVMeMILength = 4096;
+
 NVMeMi::NVMeMi(boost::asio::io_context& io, sdbusplus::bus_t& dbus, int bus,
                int addr) :
     io(io),
@@ -763,4 +765,56 @@ void NVMeMi::adminFwCommit(
         });
         return;
     }
+}
+
+int NVMeMi::adminSecuritySend(nvme_mi_ctrl_t ctrl, uint8_t proto,
+                              uint16_t proto_specific, std::span<uint8_t> data)
+{
+    struct nvme_security_send_args args;
+    memset(&args, 0x0, sizeof(args));
+    args.secp = proto;
+    args.spsp0 = proto_specific & 0xff;
+    args.spsp1 = proto_specific >> 8;
+    args.nssf = 0;
+    args.data = data.data();
+    args.data_len = data.size_bytes();
+    args.args_size = sizeof(struct nvme_security_send_args);
+
+    return nvme_mi_admin_security_send(ctrl, &args);
+}
+
+std::tuple<int, std::vector<uint8_t>>
+    NVMeMi::adminSecurityReceive(nvme_mi_ctrl_t ctrl, uint8_t proto,
+                                 uint16_t proto_specific,
+                                 uint32_t transfer_length)
+{
+    if (transfer_length > maxNVMeMILength)
+    {
+        errno = EINVAL;
+        return {-1, {}};
+    }
+
+    std::vector<uint8_t> data(transfer_length);
+
+    struct nvme_security_receive_args args;
+    memset(&args, 0x0, sizeof(args));
+    args.secp = proto;
+    args.spsp0 = proto_specific & 0xff;
+    args.spsp1 = proto_specific >> 8;
+    args.nssf = 0;
+    args.data = data.data();
+    args.data_len = data.size();
+    args.args_size = sizeof(struct nvme_security_receive_args);
+
+    int status = nvme_mi_admin_security_recv(ctrl, &args);
+    if (args.data_len > maxNVMeMILength)
+    {
+        std::cerr << "nvme_mi_admin_security_send returned excess data, "
+                  << args.data_len << std::endl;
+        errno = EIO;
+        return {-1, {}};
+    }
+
+    data.resize(args.data_len);
+    return {status, data};
 }

@@ -46,6 +46,15 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                                       const nvme_mi_admin_resp_hdr&,
                                       std::span<uint8_t>)>&& cb) override;
 
+    int adminSecuritySend(nvme_mi_ctrl_t ctrl, uint8_t proto,
+                          uint16_t proto_specific,
+                          std::span<uint8_t> data) override;
+
+    std::tuple<int, std::vector<uint8_t>>
+        adminSecurityReceive(nvme_mi_ctrl_t ctrl, uint8_t proto,
+                             uint16_t proto_specific,
+                             uint32_t transfer_length) override;
+
   private:
     // the transfer size for nvme mi messages.
     // define in github.com/linux-nvme/libnvme/blob/master/src/nvme/mi.c
