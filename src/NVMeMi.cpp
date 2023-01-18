@@ -7,6 +7,8 @@
 
 nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
+constexpr size_t maxNVMeMILength = 4096;
+
 NVMeMi::NVMeMi(boost::asio::io_context& io, sdbusplus::bus_t& dbus, int bus,
                int addr) :
     io(io),
@@ -116,6 +118,26 @@ void NVMeMi::post(std::function<void(void)>&& func)
         }
     }
     throw std::runtime_error("NVMeMi has been stopped");
+}
+
+// Calls .post(), catching runtime_error and returning an error code on failure.
+std::error_code NVMeMi::try_post(std::function<void(void)>&& func)
+{
+    if (!nvmeEP)
+    {
+        return std::make_error_code(std::errc::no_such_device);
+    }
+
+    try
+    {
+        post([self{shared_from_this()}, func{std::move(func)}]() { func(); });
+    }
+    catch (const std::runtime_error& e)
+    {
+        std::cerr << e.what() << std::endl;
+        return std::make_error_code(std::errc::no_such_device);
+    }
+    return std::error_code();
 }
 
 void NVMeMi::miSubsystemHealthStatusPoll(
@@ -762,5 +784,86 @@ void NVMeMi::adminFwCommit(
                nvme_status_field::NVME_SC_MASK);
         });
         return;
+    }
+}
+
+void NVMeMi::adminSecuritySend(
+    nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
+    std::span<uint8_t> data,
+    std::function<void(int status, int ret_errno)>&& cb)
+{
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, proto, proto_specific, data,
+                  cb{std::move(cb)}]() {
+            struct nvme_security_send_args args;
+            memset(&args, 0x0, sizeof(args));
+            args.secp = proto;
+            args.spsp0 = proto_specific & 0xff;
+            args.spsp1 = proto_specific >> 8;
+            args.nssf = 0;
+            args.data = data.data();
+            args.data_len = data.size_bytes();
+            args.args_size = sizeof(struct nvme_security_send_args);
+
+            int status = nvme_mi_admin_security_send(ctrl, &args);
+            self->io.post(
+                [cb, status, nvme_errno{errno}]() { cb(status, nvme_errno); });
+        });
+    if (post_err)
+    {
+        std::cerr << "adminSecuritySend post failed: " << post_err << std::endl;
+        cb(-1, post_err.value());
+    }
+}
+
+void NVMeMi::adminSecurityReceive(
+    nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
+    uint32_t transfer_length,
+    std::function<void(int status, int ret_errno, std::span<uint8_t> data)>&&
+        cb)
+
+{
+    if (transfer_length > maxNVMeMILength)
+    {
+        cb(-1, EINVAL, {});
+        return;
+    }
+
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, proto, proto_specific, transfer_length,
+         cb{std::move(cb)}]() {
+        std::vector<uint8_t> data(transfer_length);
+
+        struct nvme_security_receive_args args;
+        memset(&args, 0x0, sizeof(args));
+        args.secp = proto;
+        args.spsp0 = proto_specific & 0xff;
+        args.spsp1 = proto_specific >> 8;
+        args.nssf = 0;
+        args.data = data.data();
+        args.data_len = data.size();
+        args.args_size = sizeof(struct nvme_security_receive_args);
+
+        int status = nvme_mi_admin_security_recv(ctrl, &args);
+        if (args.data_len > maxNVMeMILength)
+        {
+            std::cerr << "nvme_mi_admin_security_send returned excess data, "
+                      << args.data_len << std::endl;
+            self->io.post([cb]() { cb(-1, EIO, {}); });
+            return;
+        }
+
+        data.resize(args.data_len);
+        self->io.post([cb, status, nvme_errno{errno}, data]() mutable {
+            std::span<uint8_t> span{data.data(), data.size()};
+            cb(status, nvme_errno, span);
+        });
+    });
+
+    if (post_err)
+    {
+        std::cerr << "adminSecurityReceive post failed: " << post_err
+                  << std::endl;
+        cb(-1, post_err.value(), {});
     }
 }
