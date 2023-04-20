@@ -53,6 +53,7 @@ class NVMeController
      *
      * @return cntrl_id
      */
+    // TODO: replace this with something from libnvme?
     uint16_t getCntrlId() const
     {
         return *reinterpret_cast<uint16_t*>(
@@ -206,4 +207,10 @@ class NVMeControllerEnabled :
                               uint32_t cdw1, uint32_t cdw2, uint32_t cdw3,
                               uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
                               uint32_t cdw13, uint32_t cdw14, uint32_t cdw15);
+
+    void attachVolume(boost::asio::yield_context yield,
+                      const sdbusplus::message::object_path& volPath);
+
+    void detachVolume(boost::asio::yield_context yield,
+                      const sdbusplus::message::object_path& volPath);
 };

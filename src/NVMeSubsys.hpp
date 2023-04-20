@@ -48,6 +48,8 @@ class NVMeSubsystem :
     void attachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
     void detachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
     void detachAllCtrlVolume(uint32_t nsid);
+    std::shared_ptr<NVMeVolume>
+        getVolume(const sdbusplus::message::object_path& volPath) const;
 
     const std::string path;
 

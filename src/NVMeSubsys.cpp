@@ -5,6 +5,7 @@
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"
 
+#include <charconv>
 #include <filesystem>
 
 void NVMeSubsystem::createAssociation()
@@ -852,6 +853,35 @@ void NVMeSubsystem::updateVolumes()
                 self->addIdentifyNamespace(n);
             }
         });
+}
+
+std::shared_ptr<NVMeVolume> NVMeSubsystem::getVolume(
+    const sdbusplus::message::object_path& volPath) const
+{
+    if (volPath.parent_path() != path + "/volumes")
+    {
+        std::cerr << "getVolume path '" << volPath.str
+                  << "' doesn't match parent " << path << "\n";
+        return nullptr;
+    }
+
+    std::string id = volPath.filename();
+    uint32_t nsid;
+    auto e = std::from_chars(id.data(), id.data() + id.size(), nsid);
+    if (e.ptr != id.data() + id.size() || e.ec != std::errc())
+    {
+        std::cerr << "getVolume path '" << volPath.str << "' bad nsid\n";
+        return nullptr;
+    }
+
+    auto v = volumes.find(nsid);
+    if (v == volumes.end())
+    {
+        std::cerr << "getVolume nsid " << nsid << " not found\n";
+        return nullptr;
+    }
+
+    return v->second;
 }
 
 std::vector<uint32_t> NVMeSubsystem::attachedVolumes(uint16_t ctrlId) const

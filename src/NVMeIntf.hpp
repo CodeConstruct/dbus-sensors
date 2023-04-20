@@ -231,6 +231,10 @@ class NVMeMiIntf
         nvme_mi_ctrl_t ctrl,
         std::function<void(nvme_ex_ptr ex, std::vector<uint32_t> ns)>&& cb) = 0;
 
+    virtual void adminAttachDetachNamespace(
+        nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
+        std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
+
     /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to

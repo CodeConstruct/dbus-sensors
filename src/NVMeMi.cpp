@@ -1495,3 +1495,44 @@ void NVMeMi::adminListNamespaces(
         io.post([cb{std::move(cb)}, ex]() { cb(ex, std::vector<uint32_t>()); });
     }
 }
+
+// Attaches or detaches a namespace from a controller
+void NVMeMi::adminAttachDetachNamespace(
+    nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
+    std::function<void(const std::error_code&, int nvme_status)>&& cb)
+{
+    std::error_code post_err = try_post([self{shared_from_this()}, ctrl, nsid,
+                                         attach, ctrlid, cb{std::move(cb)}]() {
+        struct nvme_ctrl_list ctrl_list;
+        struct nvme_ns_attach_args args;
+        memset(&args, 0x0, sizeof(args));
+
+        // TODO: add this to a newer libnvme
+        // uint16_t ctrl_id = nvme_mi_ctrl_id(ctrl);
+        uint16_t ctrl_id = ctrlid;
+        nvme_init_ctrl_list(&ctrl_list, 1, &ctrl_id);
+        args.ctrlist = &ctrl_list;
+        args.nsid = nsid;
+        if (attach)
+        {
+            args.sel = NVME_NS_ATTACH_SEL_CTRL_ATTACH;
+        }
+        else
+        {
+            args.sel = NVME_NS_ATTACH_SEL_CTRL_DEATTACH;
+        }
+        args.args_size = sizeof(args);
+
+        int status = nvme_mi_admin_ns_attach(ctrl, &args);
+        self->io.post([cb{std::move(cb)}, nvme_errno{errno}, status]() {
+            auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
+            cb(err, status);
+        });
+    });
+    if (post_err)
+    {
+        std::cerr << "adminAttachDetachNamespace post failed: " << post_err
+                  << std::endl;
+        io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1); });
+    }
+}

@@ -98,6 +98,24 @@ void NVMeControllerEnabled::init()
     // async methods
     ctrlInterface = objServer.add_interface(
         path, "xyz.openbmc_project.Inventory.Item.StorageController");
+    ctrlInterface->register_method(
+        "AttachVolume",
+        [weak{weak_from_this()}](boost::asio::yield_context yield,
+                                 sdbusplus::message::object_path volPath) {
+        if (auto self = weak.lock())
+        {
+            return self->attachVolume(yield, volPath);
+        }
+        });
+    ctrlInterface->register_method(
+        "DetachVolume",
+        [weak{weak_from_this()}](boost::asio::yield_context yield,
+                                 sdbusplus::message::object_path volPath) {
+        if (auto self = weak.lock())
+        {
+            return self->detachVolume(yield, volPath);
+        }
+        });
 
     ctrlInterface->initialize();
 
@@ -503,4 +521,92 @@ std::tuple<uint32_t, uint32_t, uint32_t>
         admin_status = nvme_status_get_value(nvme_status);
     }
     return {mi_status, admin_status, completion_dw0};
+}
+
+void NVMeControllerEnabled::attachVolume(
+    boost::asio::yield_context yield,
+    const sdbusplus::message::object_path& volumePath)
+{
+    uint32_t nsid;
+    if (auto s = subsys.lock())
+    {
+        auto vol = s->getVolume(volumePath);
+        if (!vol)
+        {
+            throw sdbusplus::exception::SdBusError(ENOENT, "attachVolume");
+        }
+        nsid = vol->namespaceId();
+    }
+    else
+    {
+        return;
+    }
+
+    using callback_t = void(std::tuple<std::error_code, int>);
+    uint16_t ctrlid = getCntrlId();
+    auto [err, nvme_status] =
+        boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
+            [intf{nvmeIntf}, ctrl{nvmeCtrl}, ctrlid, nsid](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+
+        intf->adminAttachDetachNamespace(
+            ctrl, ctrlid, nsid, true,
+            [h](const std::error_code& err, int nvme_status) mutable {
+            h(std::make_tuple(err, nvme_status));
+            });
+            },
+            yield);
+
+    // exception must be thrown outside of the async block
+    checkLibNVMeError(err, nvme_status, "attachVolume");
+
+    if (auto s = subsys.lock())
+    {
+        s->attachCtrlVolume(getCntrlId(), nsid);
+    }
+    updateAssociation();
+}
+
+void NVMeControllerEnabled::detachVolume(
+    boost::asio::yield_context yield,
+    const sdbusplus::message::object_path& volumePath)
+{
+    uint32_t nsid;
+    if (auto s = subsys.lock())
+    {
+        auto vol = s->getVolume(volumePath);
+        if (!vol)
+        {
+            throw sdbusplus::exception::SdBusError(ENOENT, "detachVolume");
+        }
+        nsid = vol->namespaceId();
+    }
+    else
+    {
+        return;
+    }
+
+    using callback_t = void(std::tuple<std::error_code, int>);
+    uint16_t ctrlid = getCntrlId();
+    auto [err, nvme_status] =
+        boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
+            [intf{nvmeIntf}, ctrl{nvmeCtrl}, ctrlid, nsid](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+
+        intf->adminAttachDetachNamespace(
+            ctrl, ctrlid, nsid, false,
+            [h](const std::error_code& err, int nvme_status) mutable {
+            h(std::make_tuple(err, nvme_status));
+            });
+            },
+            yield);
+
+    // exception must be thrown outside of the async block
+    checkLibNVMeError(err, nvme_status, "detachVolume");
+
+    if (auto s = subsys.lock())
+    {
+        s->detachCtrlVolume(getCntrlId(), nsid);
+    }
+    updateAssociation();
 }
