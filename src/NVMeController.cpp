@@ -45,7 +45,7 @@ NVMeControllerEnabled::NVMeControllerEnabled(
     std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
     std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl) :
     NVMeController(io, objServer, conn, path, nvmeIntf, ctrl),
-    StorageController(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
+    // StorageController(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
     NVMeAdmin(*conn, path.c_str(),
               {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
               {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
@@ -53,9 +53,9 @@ NVMeControllerEnabled::NVMeControllerEnabled(
 
 NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
     NVMeController(std::move(nvmeController)),
-    StorageController(
-        dynamic_cast<sdbusplus::bus_t&>(*this->NVMeController::conn),
-        this->NVMeController::path.c_str()),
+    // StorageController(
+    //     dynamic_cast<sdbusplus::bus_t&>(*this->NVMeController::conn),
+    //     this->NVMeController::path.c_str()),
     NVMeAdmin(*this->NVMeController::conn, this->NVMeController::path.c_str(),
               {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
               {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
@@ -134,9 +134,16 @@ void NVMeControllerEnabled::init()
             yield, proto, proto_specific, transfer_length);
         });
 
-    securityInterface->initialize();
+    // StorageController interface is implemented manually to allow
+    // async methods
+    ctrlInterface = objServer.add_interface(
+        path, "xyz.openbmc_project.Inventory.Item.StorageController");
 
-    StorageController::emit_added();
+    ctrlInterface->initialize();
+
+    securityInterface->initialize();
+    // StorageController::emit_added();
+
     NVMeAdmin::emit_added();
 }
 
@@ -355,7 +362,8 @@ NVMeControllerEnabled::~NVMeControllerEnabled()
     objServer.remove_interface(securityInterface);
     objServer.remove_interface(passthruInterface);
     NVMeAdmin::emit_removed();
-    StorageController::emit_removed();
+    // StorageController::emit_removed();
+    objServer.remove_interface(ctrlInterface);
 }
 
 NVMeController::NVMeController(

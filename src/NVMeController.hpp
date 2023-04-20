@@ -74,6 +74,7 @@ class NVMeController
     std::shared_ptr<sdbusplus::asio::connection> conn;
     std::string path;
 
+    std::shared_ptr<sdbusplus::asio::dbus_interface> ctrlInterface;
     std::shared_ptr<sdbusplus::asio::dbus_interface> securityInterface;
     std::shared_ptr<sdbusplus::asio::dbus_interface> passthruInterface;
 
@@ -101,8 +102,10 @@ class NVMeController
  */
 class NVMeControllerEnabled :
     public NVMeController,
-    private sdbusplus::xyz::openbmc_project::Inventory::Item::server::
-        StorageController,
+    //  StorageController interface will be used from PDI once coroutine
+    //  sdbusplus methods are added. In the interim it is implemented manually.
+    // private sdbusplus::xyz::openbmc_project::Inventory::Item::server::
+    //     StorageController,
     private sdbusplus::xyz::openbmc_project::NVMe::server::NVMeAdmin,
     public std::enable_shared_from_this<NVMeControllerEnabled>
 
