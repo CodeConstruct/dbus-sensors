@@ -1,5 +1,6 @@
 #include "NVMeSubsys.hpp"
 
+#include "NVMeError.hpp"
 #include "NVMePlugin.hpp"
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"

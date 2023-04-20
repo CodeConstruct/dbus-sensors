@@ -132,9 +132,6 @@ class NVMeControllerEnabled :
 
     void init();
 
-
-      static void checkLibNVMeError(const std::error_code& err, int nvme_status,
-                                  const char* method_name);
     /* NVMeAdmin method overload */
 
     /** @brief Implementation for GetLogPage

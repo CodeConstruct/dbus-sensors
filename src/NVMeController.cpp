@@ -1,6 +1,7 @@
 #include "NVMeController.hpp"
 
 #include "AsioHelper.hpp"
+#include "NVMeError.hpp"
 #include "NVMePlugin.hpp"
 
 #include <sdbusplus/exception.hpp>
@@ -526,63 +527,4 @@ std::tuple<uint32_t, uint32_t, uint32_t>
         admin_status = nvme_status_get_value(nvme_status);
     }
     return {mi_status, admin_status, completion_dw0};
-}
-
-class NVMeSdBusPlusError : public sdbusplus::exception::exception
-{
-
-  public:
-    NVMeSdBusPlusError(const std::string_view& desc) : desc(desc)
-    {}
-
-    const char* name() const noexcept override
-    {
-        return "xyz.openbmc_project.NVMe.NVMeError";
-    }
-    const char* description() const noexcept override
-    {
-        return desc.c_str();
-    }
-    int get_errno() const noexcept override
-    {
-        // arbitrary, sdbusplus method return ignores this errno
-        return EIO;
-    }
-
-  private:
-    const std::string desc;
-};
-
-/* Throws an appropriate error type for the given status from libnvme,
- * or returns normally if nvme_status == 0 */
-void NVMeControllerEnabled::checkLibNVMeError(const std::error_code& err,
-                                              int nvme_status,
-                                              const char* method_name)
-{
-    if (nvme_status < 0)
-    {
-        throw sdbusplus::exception::SdBusError(err.value(), method_name);
-    }
-    else if (nvme_status > 0)
-    {
-        int val = nvme_status_get_value(nvme_status);
-        int ty = nvme_status_get_type(nvme_status);
-        std::string desc;
-
-        switch (ty)
-        {
-            case NVME_STATUS_TYPE_NVME:
-                desc =
-                    std::string("NVMe: ") + nvme_status_to_string(val, false);
-                break;
-            case NVME_STATUS_TYPE_MI:
-                desc = std::string("NVMe MI: ") + nvme_mi_status_to_string(val);
-                break;
-            default:
-                std::cerr << "Unknown libnvme error status " << nvme_status
-                          << std::endl;
-                desc = "Unknown libnvme error";
-        }
-        throw NVMeSdBusPlusError(desc);
-    }
 }
