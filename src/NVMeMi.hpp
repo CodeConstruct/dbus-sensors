@@ -75,6 +75,11 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                          std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&&
                              finished_cb) override;
 
+    void adminDeleteNamespace(
+        nvme_mi_ctrl_t ctrl, uint32_t nsid,
+        std::function<void(const std::error_code&, int nvme_status)>&& cb)
+        override;
+
   private:
     // the transfer size for nvme mi messages.
     // define in github.com/linux-nvme/libnvme/blob/master/src/nvme/mi.c

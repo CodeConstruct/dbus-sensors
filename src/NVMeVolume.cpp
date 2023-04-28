@@ -15,6 +15,24 @@ NVMeVolume::NVMeVolume(sdbusplus::asio::object_server& objServer,
 
 void NVMeVolume::init()
 {
+    deleteInterface =
+        objServer.add_interface(path, "xyz.openbmc_project.Object.Delete");
+    deleteInterface->register_method(
+        "Delete", [weak{weak_from_this()}](boost::asio::yield_context yield) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                throw std::runtime_error("volume delete called twice?");
+            }
+            auto subsys = self->subsys.lock();
+            if (!subsys)
+            {
+                throw std::runtime_error("nvmesensor is shutting down");
+            }
+            subsys->deleteVolume(yield, self);
+        });
+    deleteInterface->initialize();
+
     VolumeBase::emit_added();
     NvmeVolumeBase::emit_added();
 }
@@ -34,6 +52,7 @@ NVMeVolume::~NVMeVolume()
 {
     NvmeVolumeBase::emit_removed();
     VolumeBase::emit_removed();
+    objServer.remove_interface(deleteInterface);
 }
 
 void NVMeVolume::erase(VolumeBase::EraseMethod eraseType)

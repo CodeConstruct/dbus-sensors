@@ -727,3 +727,43 @@ std::string NVMeSubsystem::volumePath(uint32_t nsid) const
 {
     return path + "/volumes/" + std::to_string(nsid);
 }
+
+void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
+                                 std::shared_ptr<NVMeVolume> volume)
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+
+    using callback_t = void(std::tuple<std::error_code, int>);
+    auto [err, nvme_status] =
+        boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
+            [intf, ctrl, nsid{volume->namespaceId()}](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+
+        intf->adminDeleteNamespace(
+            ctrl, nsid,
+            [h](const std::error_code& err, int nvme_status) mutable {
+            h(std::make_tuple(err, nvme_status));
+            });
+            },
+            yield);
+
+    // exception must be thrown outside of the async block
+    checkLibNVMeError(err, nvme_status, "Delete");
+
+    // remove any progress references
+    for (const auto& [prog_id, prog] : createProgress)
+    {
+        std::string s = prog->volumePath();
+        if (prog->volumePath() == volume->path)
+        {
+            createProgress.erase(prog_id);
+            break;
+        }
+    }
+
+    if (volumes.erase(volume->namespaceId()) != 1)
+    {
+        throw std::runtime_error("volume disappeared unexpectedly");
+    }
+}

@@ -41,6 +41,9 @@ class NVMeSubsystem :
      */
     std::string volumePath(uint32_t nsid) const;
 
+    void deleteVolume(boost::asio::yield_context yield,
+                      std::shared_ptr<NVMeVolume> volume);
+
   private:
     NVMeSubsystem(boost::asio::io_context& io,
                   sdbusplus::asio::object_server& objServer,

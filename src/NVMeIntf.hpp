@@ -215,6 +215,10 @@ class NVMeMiIntf
         std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
         std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&& finished_cb) = 0;
 
+    virtual void adminDeleteNamespace(
+        nvme_mi_ctrl_t ctrl, uint32_t nsid,
+        std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
+
     /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to

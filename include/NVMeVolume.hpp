@@ -22,7 +22,10 @@ class NVMeSubsystem;
 // using DeleteBase =
 //     sdbusplus::xyz::openbmc_project::Object::server::Delete;
 
-class NVMeVolume : public VolumeBase, public NvmeVolumeBase
+class NVMeVolume :
+    public VolumeBase,
+    public NvmeVolumeBase,
+    public std::enable_shared_from_this<NVMeVolume>
 {
   public:
     static std::shared_ptr<NVMeVolume>
@@ -51,8 +54,7 @@ class NVMeVolume : public VolumeBase, public NvmeVolumeBase
     void changePassword(std::vector<uint8_t> oldPassword,
                         std::vector<uint8_t> newPassword) override;
 
-    // TODO, for Object.Delete
-    // std::shared_ptr<sdbusplus::asio::dbus_interface> deleteInterface;
+    std::shared_ptr<sdbusplus::asio::dbus_interface> deleteInterface;
 
     sdbusplus::asio::object_server& objServer;
 

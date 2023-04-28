@@ -1412,3 +1412,24 @@ void NVMeMi::createNamespace(
             [submitted_cb{std::move(submitted_cb)}, e]() { submitted_cb(e); });
     }
 }
+
+// Deletes a namespace
+void NVMeMi::adminDeleteNamespace(
+    nvme_mi_ctrl_t ctrl, uint32_t nsid,
+    std::function<void(const std::error_code&, int nvme_status)>&& cb)
+{
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, nsid, cb{std::move(cb)}]() {
+        int status = nvme_mi_admin_ns_mgmt_delete(ctrl, nsid);
+
+        self->io.post([cb{std::move(cb)}, nvme_errno{errno}, status]() {
+            auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
+            cb(err, status);
+        });
+    });
+    if (post_err)
+    {
+        std::cerr << "deleteNamespace post failed: " << post_err << std::endl;
+        io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1); });
+    }
+}
