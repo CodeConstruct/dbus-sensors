@@ -18,6 +18,9 @@
 
 #include "dbus-sensor_config.h"
 
+#include <sys/random.h>
+#include <systemd/sd-id128.h>
+
 #include "DeviceMgmt.hpp"
 
 #include <boost/container/flat_map.hpp>
@@ -25,6 +28,7 @@
 #include <sdbusplus/asio/object_server.hpp>
 #include <sdbusplus/bus/match.hpp>
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -400,6 +404,20 @@ static void
         },
         post::busname, post::path, properties::interface, properties::get,
         post::interface, post::property);
+}
+
+/* Returns a random string suitable as a D-Bus object path element */
+std::string getRandomId()
+{
+    static std::atomic_size_t counter;
+    sd_id128_t id;
+    char s[SD_ID128_STRING_MAX];
+    sd_id128_randomize(&id);
+    sd_id128_to_string(id, s);
+    std::string r(s);
+    r += '_';
+    r += std::to_string(++counter);
+    return r;
 }
 
 static void

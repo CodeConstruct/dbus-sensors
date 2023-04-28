@@ -28,7 +28,7 @@ utils_a = static_library(
 
 utils_dep = declare_dependency(
     link_with: [ utils_a ],
-    dependencies: [ sdbusplus ],
+    dependencies: [ sdbusplus, systemd ],
 )
 
 devicemgmt_a = static_library(

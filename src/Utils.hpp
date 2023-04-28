@@ -261,6 +261,8 @@ inline float getPollRate(const SensorBaseConfigMap& cfg, float dflt)
     return pollRate;
 }
 
+std::string getRandomId();
+
 inline void setLed(const std::shared_ptr<sdbusplus::asio::connection>& conn,
                    const std::string& name, bool on)
 {
