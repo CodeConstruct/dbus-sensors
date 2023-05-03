@@ -78,6 +78,8 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     // mark the availability of the Storage device.
     void markAvailable(bool toggle);
 
+    void fallbackNoSecondary();
+
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;
     static constexpr unsigned UnavailableMaxCount = 60;

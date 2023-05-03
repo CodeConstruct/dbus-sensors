@@ -285,6 +285,21 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     self->status = Status::Stop;
                     self->markFunctional(false);
                     self->markAvailable(false);
+                    // std::cerr << "fail to identify secondary controller list"
+                    //           << std::endl;
+                    // self->status = Status::Stop;
+                    // self->markFunctional(false);
+                    // self->markAvailable(false);
+                    // TODO Some drives don't support identify secondary, so use
+                    // fallback. This may need refiniing.
+                    std::cerr << "Failed to identify secondary controller "
+                                 "list. error "
+                              << ec << " data size " << data.size()
+                              << " expected size "
+                              << sizeof(nvme_secondary_ctrl_list)
+                              << ". Fallback, using arbitrary controller as "
+                                 "primary.\n";
+                    self->fallbackNoSecondary();
                     return;
                 }
                 nvme_secondary_ctrl_list* listHdr =
@@ -562,4 +577,20 @@ void NVMeSubsystem::stop()
     {
         plugin.reset();
     }
+}
+
+void NVMeSubsystem::fallbackNoSecondary()
+{
+    // choose an arbitrary one
+    auto& pc = controllers.begin()->second.first;
+    primaryController = NVMeControllerEnabled::create(std::move(*pc));
+    // replace with the new controller object
+    pc = primaryController;
+
+    // start controller
+    for (auto& [_, pair] : controllers)
+    {
+        pair.first->start(pair.second);
+    }
+    status = Status::Start;
 }
