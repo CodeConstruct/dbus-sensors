@@ -111,11 +111,6 @@ class NVMeControllerEnabled :
 
 {
   public:
-    static std::shared_ptr<NVMeControllerEnabled> create(
-        boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
-        std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
-        std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl);
-
     static std::shared_ptr<NVMeControllerEnabled>
         create(NVMeController&& nvmeController);
 
@@ -124,13 +119,6 @@ class NVMeControllerEnabled :
     void start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin) override;
 
   private:
-    NVMeControllerEnabled(boost::asio::io_context& io,
-                          sdbusplus::asio::object_server& objServer,
-                          std::shared_ptr<sdbusplus::asio::connection> conn,
-                          std::string path,
-                          std::shared_ptr<NVMeMiIntf> nvmeIntf,
-                          nvme_mi_ctrl_t ctrl);
-
     NVMeControllerEnabled(NVMeController&& nvmeController);
 
     void init();

@@ -236,7 +236,7 @@ static void handleConfigurations(
             continue;
         try
         {
-            auto nvmeSubsys = std::make_shared<NVMeSubsystem>(
+            auto nvmeSubsys = NVMeSubsystem::create(
                 io, objectServer, dbusConnection, interfacePath, *sensorName,
                 configData, std::move(find->second));
             nvmeSubsysMap.emplace(interfacePath, nvmeSubsys);

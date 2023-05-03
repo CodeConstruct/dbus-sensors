@@ -1,6 +1,6 @@
 #include "NVMeSubsys.hpp"
 
-#include "NVMeError.hpp"
+#include "AsioHelper.hpp"
 #include "NVMePlugin.hpp"
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"
@@ -37,16 +37,31 @@ static double getTemperatureReading(int8_t reading)
     return reading;
 }
 
-NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& asio,
-                             sdbusplus::asio::object_server& server,
+std::shared_ptr<NVMeSubsystem> NVMeSubsystem::create(
+    boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
+    std::shared_ptr<sdbusplus::asio::connection> conn, const std::string& path,
+    const std::string& name, const SensorData& configData, NVMeIntf intf)
+{
+    auto self = std::shared_ptr<NVMeSubsystem>(
+        new NVMeSubsystem(io, objServer, conn, path, name, configData, intf));
+    self->init();
+    return self;
+}
+
+NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
+                             sdbusplus::asio::object_server& objServer,
                              std::shared_ptr<sdbusplus::asio::connection> conn,
                              const std::string& path, const std::string& name,
                              const SensorData& configData, NVMeIntf intf) :
-    io(asio),
-    objServer(server), conn(conn), path(path), name(name), config(configData),
-    nvmeIntf(std::move(intf)), status(Status::Stop),
-    storage(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str()),
+    NVMeStorage(objServer, *dynamic_cast<sdbusplus::bus_t*>(conn.get()),
+                path.c_str()),
+    io(io), objServer(objServer), conn(conn), path(path), name(name),
+    config(configData), nvmeIntf(intf), status(Status::Stop),
     drive(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str())
+{}
+
+// Performs initialisation after shared_from_this() has been set up.
+void NVMeSubsystem::init()
 {
     NVMeIntf::Protocol protocol{NVMeIntf::Protocol::NVMeBasic};
     try
@@ -64,6 +79,9 @@ NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& asio,
     {
         throw std::runtime_error("Unsupported NVMe interface");
     }
+
+    NVMeStorage::init(
+        std::static_pointer_cast<NVMeStorage>(shared_from_this()));
 
     /* xyz.openbmc_project.Inventory.Item.Drive */
     drive.protocol(NVMeDrive::DriveProtocol::NVMe);
@@ -102,9 +120,10 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
     }
 
     // Enable primary controller since they are required to work
-    auto& primaryController = findPrimary->second.first;
-    primaryController =
-        NVMeControllerEnabled::create(std::move(*primaryController.get()));
+    auto& pc = findPrimary->second.first;
+    primaryController = NVMeControllerEnabled::create(std::move(*pc));
+    // replace with the new controller object
+    pc = primaryController;
 
     std::vector<std::shared_ptr<NVMeController>> secCntrls;
     for (int i = 0; i < secCntlrCount; i++)
@@ -545,6 +564,7 @@ void NVMeSubsystem::start()
                   dataProcessor);
     }
 }
+
 void NVMeSubsystem::stop()
 {
     if (ctempTimer)

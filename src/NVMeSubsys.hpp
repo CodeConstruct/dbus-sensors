@@ -9,16 +9,19 @@
 class NVMeControllerPlugin;
 class NVMePlugin;
 
-class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
+class NVMeSubsystem :
+    public std::enable_shared_from_this<NVMeSubsystem>,
+    public NVMeStorage
 {
   public:
     static constexpr const char* sensorType = "NVME1000";
 
-    NVMeSubsystem(boost::asio::io_context& io,
-                  sdbusplus::asio::object_server& objServer,
-                  std::shared_ptr<sdbusplus::asio::connection> conn,
-                  const std::string& path, const std::string& name,
-                  const SensorData& configData, NVMeIntf intf);
+    static std::shared_ptr<NVMeSubsystem>
+        create(boost::asio::io_context& io,
+               sdbusplus::asio::object_server& objServer,
+               std::shared_ptr<sdbusplus::asio::connection> conn,
+               const std::string& path, const std::string& name,
+               const SensorData& configData, NVMeIntf intf);
 
     ~NVMeSubsystem();
 
@@ -27,6 +30,13 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     void stop();
 
   private:
+    NVMeSubsystem(boost::asio::io_context& io,
+                  sdbusplus::asio::object_server& objServer,
+                  std::shared_ptr<sdbusplus::asio::connection> conn,
+                  const std::string& path, const std::string& name,
+                  const SensorData& configData, NVMeIntf intf);
+    void init();
+
     friend class NVMePlugin;
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;
@@ -54,11 +64,6 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     std::shared_ptr<boost::asio::steady_timer> ctempTimer;
 
     /*
-    Storage interface: xyz.openbmc_project.Inventory.Item.Storage
-    */
-    NVMeStorage storage;
-
-    /*
     Drive interface: xyz.openbmc_project.Inventory.Item.Drive
     */
     NVMeDrive drive;
@@ -67,6 +72,10 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     std::map<uint16_t, std::pair<std::shared_ptr<NVMeController>,
                                  std::shared_ptr<NVMeControllerPlugin>>>
         controllers{};
+
+    // controller to use for NVMe operations. Is a member of the controllers
+    // map.
+    std::shared_ptr<NVMeControllerEnabled> primaryController;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
     void createStorageAssociation();

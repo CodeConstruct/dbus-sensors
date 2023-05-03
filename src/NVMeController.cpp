@@ -18,18 +18,6 @@ using sdbusplus::xyz::openbmc_project::Inventory::Item::server::
     StorageController;
 using sdbusplus::xyz::openbmc_project::NVMe::server::NVMeAdmin;
 
-std::shared_ptr<NVMeControllerEnabled> NVMeControllerEnabled::create(
-    boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
-    std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
-    std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl)
-{
-
-    auto self = std::shared_ptr<NVMeControllerEnabled>(
-        new NVMeControllerEnabled(io, objServer, conn, path, nvmeIntf, ctrl));
-    self->init();
-    return self;
-}
-
 std::shared_ptr<NVMeControllerEnabled>
     NVMeControllerEnabled::create(NVMeController&& nvmeController)
 {
@@ -39,17 +27,6 @@ std::shared_ptr<NVMeControllerEnabled>
     self->init();
     return self;
 }
-
-NVMeControllerEnabled::NVMeControllerEnabled(
-    boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
-    std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
-    std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl) :
-    NVMeController(io, objServer, conn, path, nvmeIntf, ctrl),
-    // StorageController(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
-    NVMeAdmin(*conn, path.c_str(),
-              {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
-              {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
-{}
 
 NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
     NVMeController(std::move(nvmeController)),
