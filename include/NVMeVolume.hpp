@@ -31,7 +31,7 @@ class NVMeVolume :
     static std::shared_ptr<NVMeVolume>
         create(sdbusplus::asio::object_server& objServer,
                std::shared_ptr<sdbusplus::asio::connection> conn,
-               std::shared_ptr<NVMeSubsystem> subsys, uint32_t nsid);
+               std::shared_ptr<NVMeSubsystem> subsys, const NVMeNSIdentify& ns);
     ~NVMeVolume() override;
 
     const std::string path;
@@ -39,7 +39,7 @@ class NVMeVolume :
   private:
     NVMeVolume(sdbusplus::asio::object_server& objServer,
                std::shared_ptr<sdbusplus::asio::connection> conn,
-               std::shared_ptr<NVMeSubsystem> subsys, uint32_t nsid);
+               std::shared_ptr<NVMeSubsystem> subsys, const NVMeNSIdentify& ns);
     void init();
 
     void formatLuks(std::vector<uint8_t> password,

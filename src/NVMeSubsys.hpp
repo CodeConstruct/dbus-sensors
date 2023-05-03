@@ -134,11 +134,18 @@ class NVMeSubsystem :
 
     // callback when drive completes. not called in dbus method context.
     void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
-                              uint32_t new_ns);
+                              NVMeNSIdentify ns);
 
     void addIdentifyNamespace(uint32_t nsid);
 
     void updateVolumes();
+
+    // removes state associated with the volume. Does not manipulate the drive.
+    void forgetVolume(std::shared_ptr<NVMeVolume> volume);
+
+    // adds state associated with the volume. Does not create a volume.
+    // may throw if the volume exists.
+    std::shared_ptr<NVMeVolume> addVolume(const NVMeNSIdentify& ns);
 
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;

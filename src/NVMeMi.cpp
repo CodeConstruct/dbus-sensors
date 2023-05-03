@@ -1330,68 +1330,77 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
 void NVMeMi::createNamespace(
     nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format, bool metadata_at_end,
     std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
-    std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&& finished_cb)
+    std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finished_cb)
 {
     printf("createns %d\n", (int)gettid());
-    std::error_code post_err =
-        try_post([self{shared_from_this()}, ctrl, size, lba_format,
-                  metadata_at_end, submitted_cb{std::move(submitted_cb)},
-                  finished_cb{std::move(finished_cb)}]() {
-            size_t block_size;
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, size, lba_format, metadata_at_end,
+         submitted_cb{std::move(submitted_cb)},
+         finished_cb{std::move(finished_cb)}]() {
+        size_t block_size;
 
-            try
-            {
-                block_size = self->getBlockSize(ctrl, lba_format);
-            }
-            catch (nvme_ex_ptr e)
-            {
-                submitted_cb(e);
-                return;
-            }
+        try
+        {
+            block_size = self->getBlockSize(ctrl, lba_format);
+        }
+        catch (nvme_ex_ptr e)
+        {
+            submitted_cb(e);
+            return;
+        }
 
-            if (size % block_size != 0)
-            {
-                auto msg =
-                    std::string("Size must be a multiple of the block size ") +
-                    std::to_string(block_size);
-                submitted_cb(std::make_shared<NVMeSdBusPlusError>(msg));
-                return;
-            }
+        if (size % block_size != 0)
+        {
+            auto msg =
+                std::string("Size must be a multiple of the block size ") +
+                std::to_string(block_size);
+            submitted_cb(std::make_shared<NVMeSdBusPlusError>(msg));
+            return;
+        }
 
-            uint64_t blocks = size / block_size;
+        uint64_t blocks = size / block_size;
 
-            // TODO: this will become nvme_ns_mgmt_host_sw_specified in a newer
-            // libnvme.
-            struct nvme_id_ns data;
-            uint32_t new_ns = 0;
+        // TODO: this will become nvme_ns_mgmt_host_sw_specified in a newer
+        // libnvme.
+        struct nvme_id_ns data;
+        uint32_t new_nsid = 0;
 
-            uint8_t flbas = 0;
-            if (metadata_at_end)
-            {
-                flbas |= (1 << 4);
-            }
-            // low 4 bits at 0:3
-            flbas |= (lba_format & 0xf);
-            // high 2 bits at 5:6
-            flbas |= ((lba_format & 0x30) << 1);
+        uint8_t flbas = 0;
+        if (metadata_at_end)
+        {
+            flbas |= (1 << 4);
+        }
+        // low 4 bits at 0:3
+        flbas |= (lba_format & 0xf);
+        // high 2 bits at 5:6
+        flbas |= ((lba_format & 0x30) << 1);
 
-            memset(&data, 0x0, sizeof(data));
-            data.nsze = ::htole64(blocks);
-            data.ncap = ::htole64(blocks);
-            data.flbas = flbas;
+        memset(&data, 0x0, sizeof(data));
+        data.nsze = ::htole64(blocks);
+        data.ncap = ::htole64(blocks);
+        data.flbas = flbas;
 
-            printf("verified %d\n", (int)gettid());
+        printf("verified %d\n", (int)gettid());
 
-            // submission has been verified.
-            submitted_cb(nvme_ex_ptr());
-            printf("after submitted_cb %d\n", (int)gettid());
+        // submission has been verified.
+        submitted_cb(nvme_ex_ptr());
+        printf("after submitted_cb %d\n", (int)gettid());
 
-            int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_ns);
-            nvme_ex_ptr e = makeLibNVMeError(errno, status, "createVolume");
+        int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_nsid);
+        nvme_ex_ptr e = makeLibNVMeError(errno, status, "createVolume");
 
-            self->io.post([finished_cb{std::move(finished_cb)}, e, new_ns]() {
-                finished_cb(e, new_ns);
-            });
+        NVMeNSIdentify newns = {
+            .namespaceId = new_nsid,
+            .size = size,
+            .capacity = size,
+            .blockSize = block_size,
+            .lbaFormat = lba_format,
+            .metadataAtEnd = metadata_at_end,
+        };
+
+        self->io.post([finished_cb{std::move(finished_cb)}, e, newns]() {
+            finished_cb(e, newns);
+        });
 
 #if 0
         // TODO testing purposes
@@ -1407,7 +1416,7 @@ void NVMeMi::createNamespace(
         auto err = std::make_error_code(static_cast<std::errc>(0));
         cb(err, 0, new_ns);
 #endif
-        });
+    });
 
     printf("submitted cb %d\n", (int)gettid());
 

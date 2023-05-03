@@ -668,7 +668,7 @@ sdbusplus::message::object_path
             },
 
             // finished_cb
-            [weak, prog_id](nvme_ex_ptr ex, uint32_t new_ns) mutable {
+            [weak, prog_id](nvme_ex_ptr ex, NVMeNSIdentify newns) mutable {
             // #5. This will only be called once #4 completes.
             // It will not be called if the submit failed.
             auto self = weak.lock();
@@ -679,7 +679,7 @@ sdbusplus::message::object_path
                 return;
             }
             // The NS create has completed (either successfully or not)
-            self->createVolumeFinished(prog_id, ex, new_ns);
+            self->createVolumeFinished(prog_id, ex, newns);
         });
         },
         yield);
@@ -708,7 +708,7 @@ sdbusplus::message::object_path
 }
 
 void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
-                                         uint32_t new_ns)
+                                         NVMeNSIdentify ns)
 {
     try
     {
@@ -725,18 +725,17 @@ void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
             return;
         }
 
-        if (volumes.contains(new_ns))
+        std::shared_ptr<NVMeVolume> vol;
+        try
         {
-            std::string err_msg = std::string("Internal error, NSID exists " +
-                                              std::to_string(new_ns));
-            std::cerr << err_msg << "\n";
-            prog->createFailure(makeLibNVMeError(err_msg));
+            vol = addVolume(ns);
+        }
+        catch (nvme_ex_ptr e)
+        {
+            prog->createFailure(e);
             return;
         }
 
-        auto vol =
-            NVMeVolume::create(objServer, conn, shared_from_this(), new_ns);
-        volumes.insert({new_ns, vol});
         prog->createSuccess(vol);
         updateAssociation();
     }
@@ -927,6 +926,49 @@ void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
     }
 }
 
+// Will throw a nvme_ex_ptr if the NS already exists */
+std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
+{
+    if (volumes.contains(ns.namespaceId))
+    {
+        std::string err_msg = std::string("Internal error, NSID exists " +
+                                          std::to_string(ns.namespaceId));
+        std::cerr << err_msg << "\n";
+        throw makeLibNVMeError(err_msg);
+    }
+
+    auto vol = NVMeVolume::create(objServer, conn, shared_from_this(), ns);
+    volumes.insert({ns.namespaceId, vol});
+
+    updateAssociation();
+    return vol;
+}
+
+void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
+{
+    // remove any progress references
+    for (const auto& [prog_id, prog] : createProgress)
+    {
+        std::string s = prog->volumePath();
+        if (prog->volumePath() == volume->path)
+        {
+            createProgress.erase(prog_id);
+            break;
+        }
+    }
+
+    // remove from attached controllers list
+    detachAllCtrlVolume(volume->namespaceId());
+
+    if (volumes.erase(volume->namespaceId()) != 1)
+    {
+        std::cerr << "volume " << volume->namespaceId()
+                  << " disappeared unexpectedly\n";
+    }
+
+    updateAssociation();
+}
+
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
                                  std::shared_ptr<NVMeVolume> volume)
 {
@@ -950,21 +992,5 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "Delete");
 
-    // remove any progress references
-    for (const auto& [prog_id, prog] : createProgress)
-    {
-        std::string s = prog->volumePath();
-        if (prog->volumePath() == volume->path)
-        {
-            createProgress.erase(prog_id);
-            break;
-        }
-    }
-
-    if (volumes.erase(volume->namespaceId()) != 1)
-    {
-        throw std::runtime_error("volume disappeared unexpectedly");
-    }
-
-    updateAssociation();
+    forgetVolume(volume);
 }

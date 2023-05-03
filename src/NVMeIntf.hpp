@@ -11,6 +11,7 @@
 
 class NVMeBasicIntf;
 class NVMeMiIntf;
+struct NVMeNSIdentify;
 /**
  * @brief a container class to hold smart ptr to NVMe Basic or NVMe MI
  * implementation instance
@@ -213,7 +214,8 @@ class NVMeMiIntf
         nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
         bool metadata_at_end,
         std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
-        std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&& finished_cb) = 0;
+        std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&&
+            finished_cb) = 0;
 
     virtual void adminDeleteNamespace(
         nvme_mi_ctrl_t ctrl, uint32_t nsid,
@@ -265,4 +267,15 @@ class NVMeMiIntf
                   std::function<void(const std::error_code& ec,
                                      const nvme_mi_admin_resp_hdr& admin_resp,
                                      std::span<uint8_t> resp_data)>&& cb) = 0;
+};
+
+/* A subset of Namespace Identify details of interest */
+struct NVMeNSIdentify
+{
+    uint32_t namespaceId;
+    uint64_t size;
+    uint64_t capacity;
+    size_t blockSize;
+    size_t lbaFormat;
+    bool metadataAtEnd;
 };

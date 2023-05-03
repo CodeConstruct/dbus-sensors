@@ -2,15 +2,22 @@
 
 NVMeVolume::NVMeVolume(sdbusplus::asio::object_server& objServer,
                        std::shared_ptr<sdbusplus::asio::connection> conn,
-                       std::shared_ptr<NVMeSubsystem> subsys, uint32_t nsid) :
+                       std::shared_ptr<NVMeSubsystem> subsys,
+                       const NVMeNSIdentify& ns) :
     VolumeBase(dynamic_cast<sdbusplus::bus_t&>(*conn),
-               subsys->volumePath(nsid).c_str()),
+               subsys->volumePath(ns.namespaceId).c_str()),
     NvmeVolumeBase(dynamic_cast<sdbusplus::bus_t&>(*conn),
-                   subsys->volumePath(nsid).c_str()),
-    path(subsys->volumePath(nsid)), objServer(objServer), subsys(subsys)
+                   subsys->volumePath(ns.namespaceId).c_str()),
+    path(subsys->volumePath(ns.namespaceId)), objServer(objServer),
+    subsys(subsys)
 {
-    namespaceId(nsid, false);
-    // see init()
+    namespaceId(ns.namespaceId, false);
+    size(ns.size, false);
+    blockSize(ns.blockSize, false);
+    lbaFormat(ns.lbaFormat, false);
+    metadataAtEnd(ns.metadataAtEnd, false);
+
+    // see init() for other initialisation
 }
 
 void NVMeVolume::init()
@@ -40,10 +47,11 @@ void NVMeVolume::init()
 std::shared_ptr<NVMeVolume>
     NVMeVolume::create(sdbusplus::asio::object_server& objServer,
                        std::shared_ptr<sdbusplus::asio::connection> conn,
-                       std::shared_ptr<NVMeSubsystem> subsys, uint32_t nsid)
+                       std::shared_ptr<NVMeSubsystem> subsys,
+                       const NVMeNSIdentify& ns)
 {
     auto self = std::shared_ptr<NVMeVolume>(
-        new NVMeVolume(objServer, conn, subsys, nsid));
+        new NVMeVolume(objServer, conn, subsys, ns));
     self->init();
     return self;
 }
