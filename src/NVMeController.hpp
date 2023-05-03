@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NVMeIntf.hpp"
+#include "Utils.hpp"
 
 #include <boost/asio.hpp>
 #include <sdbusplus/asio/connection.hpp>
@@ -12,6 +13,7 @@
 #include <utility>
 
 class NVMeControllerPlugin;
+class NVMeSubsystem;
 
 /**
  * @brief A class to represent the NVMeController has not been enabled (CC.EN =
@@ -30,7 +32,7 @@ class NVMeController
                    sdbusplus::asio::object_server& objServer,
                    std::shared_ptr<sdbusplus::asio::connection> conn,
                    std::string path, std::shared_ptr<NVMeMiIntf> nvmeIntf,
-                   nvme_mi_ctrl_t ctrl);
+                   nvme_mi_ctrl_t ctrl, std::weak_ptr<NVMeSubsystem> subsys);
 
     virtual ~NVMeController();
 
@@ -67,12 +69,11 @@ class NVMeController
     }
 
     /**
-     * @brief Register the NVMe subsystem to the controller. The function can be
-     * called mutiple times to associate multi-subsys to a single controller.
+     * @brief Update association interface.
      *
-     * @param subsysPath Path to the subsystem
-     */
-    void addSubsystemAssociation(const std::string& subsysPath);
+     * May be called externally when attached volumes change.
+     **/
+    void updateAssociation();
 
   protected:
     friend class NVMeControllerPlugin;
@@ -90,11 +91,14 @@ class NVMeController
     nvme_mi_ctrl_t nvmeCtrl;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
-    // The association to subsystems
-    std::vector<std::string> subsystems;
+    void createAssociation();
+    std::vector<Association> makeAssociation() const;
 
     // The association to secondary controllers from a primary controller
     std::vector<std::string> secondaryControllers;
+
+    // The parent subsystem
+    std::weak_ptr<NVMeSubsystem> subsys;
 
     // NVMe Plug-in for vendor defined command/field
     std::weak_ptr<NVMeControllerPlugin> plugin;

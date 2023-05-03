@@ -44,6 +44,13 @@ class NVMeSubsystem :
     void deleteVolume(boost::asio::yield_context yield,
                       std::shared_ptr<NVMeVolume> volume);
 
+    std::vector<uint32_t> attachedVolumes(uint16_t ctrlId) const;
+    void attachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
+    void detachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
+    void detachAllCtrlVolume(uint32_t nsid);
+
+    const std::string path;
+
   private:
     NVMeSubsystem(boost::asio::io_context& io,
                   sdbusplus::asio::object_server& objServer,
@@ -56,7 +63,6 @@ class NVMeSubsystem :
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;
     std::shared_ptr<sdbusplus::asio::connection> conn;
-    std::string path;
     std::string name;
     SensorData config;
 
@@ -94,6 +100,11 @@ class NVMeSubsystem :
     std::map<uint32_t, std::shared_ptr<NVMeVolume>> volumes;
 
     /*
+     * volumes attached to controllers
+     */
+    std::map<uint16_t, std::set<uint32_t>> attached;
+
+    /*
     In-progress or completed create operations
     */
     std::unordered_map<std::string, std::shared_ptr<NVMeCreateVolumeProgress>>
@@ -104,7 +115,9 @@ class NVMeSubsystem :
     std::shared_ptr<NVMeControllerEnabled> primaryController;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
-    void createStorageAssociation();
+    void createAssociation();
+    void updateAssociation();
+    std::vector<Association> makeAssociation() const;
 
     // make the subsystem functional/functional be enabling/disabling the
     // storage controller, namespaces and thermal sensors.

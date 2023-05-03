@@ -3,6 +3,7 @@
 #include "AsioHelper.hpp"
 #include "NVMeError.hpp"
 #include "NVMePlugin.hpp"
+#include "NVMeSubsys.hpp"
 
 #include <sdbusplus/exception.hpp>
 #include <sdbusplus/message/native_types.hpp>
@@ -21,7 +22,6 @@ using sdbusplus::xyz::openbmc_project::NVMe::server::NVMeAdmin;
 std::shared_ptr<NVMeControllerEnabled>
     NVMeControllerEnabled::create(NVMeController&& nvmeController)
 {
-
     auto self = std::shared_ptr<NVMeControllerEnabled>(
         new NVMeControllerEnabled(std::move(nvmeController)));
     self->init();
@@ -40,24 +40,7 @@ NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
 
 void NVMeControllerEnabled::init()
 {
-    assocIntf = objServer.add_interface(
-        path, "xyz.openbmc_project.Association.Definitions");
-
-    // the association could have be set via NVMeController, set the association
-    // dbus property accordingly
-    std::vector<Association> associations;
-    for (const auto& subsys : subsystems)
-    {
-        associations.emplace_back("storage", "storage_controller", subsys);
-    }
-
-    for (const auto& cntrl : secondaryControllers)
-    {
-        associations.emplace_back("secondary", "primary", cntrl);
-    }
-
-    assocIntf->register_property("Associations", associations);
-    assocIntf->initialize();
+    createAssociation();
 
     passthruInterface =
         objServer.add_interface(path, "xyz.openbmc_project.NVMe.Passthru");
@@ -128,6 +111,49 @@ void NVMeControllerEnabled::start(
     std::shared_ptr<NVMeControllerPlugin> nvmePlugin)
 {
     this->NVMeController::start(std::move(nvmePlugin));
+}
+
+void NVMeController::createAssociation()
+{
+    assocIntf = objServer.add_interface(path, association::interface);
+    assocIntf->register_property("Associations", makeAssociation());
+    assocIntf->initialize();
+}
+
+void NVMeController::updateAssociation()
+{
+    if (assocIntf)
+    {
+        assocIntf->set_property("Associations", makeAssociation());
+    }
+}
+
+std::vector<Association> NVMeController::makeAssociation() const
+{
+    std::vector<Association> associations;
+    std::filesystem::path p(path);
+
+    auto s = subsys.lock();
+    if (!s)
+    {
+        std::cerr << "makeAssociation() after shutdown\n";
+        return associations;
+    }
+
+    associations.emplace_back("storage", "storage_controller", s->path);
+
+    for (const auto& cntrl : secondaryControllers)
+    {
+        associations.emplace_back("secondary", "primary", cntrl);
+    }
+
+    for (uint32_t nsid : s->attachedVolumes(getCntrlId()))
+    {
+        auto p = s->volumePath(nsid);
+        associations.emplace_back("attaching", "attached", p);
+    }
+
+    return associations;
 }
 
 sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
@@ -346,10 +372,11 @@ NVMeControllerEnabled::~NVMeControllerEnabled()
 NVMeController::NVMeController(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
     std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
-    std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl) :
+    std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl,
+    std::weak_ptr<NVMeSubsystem> subsys) :
     io(io),
     objServer(objServer), conn(conn), path(path), nvmeIntf(nvmeIntf),
-    nvmeCtrl(ctrl)
+    nvmeCtrl(ctrl), subsys(subsys)
 {}
 
 NVMeController::~NVMeController()
@@ -376,43 +403,7 @@ void NVMeController::setSecAssoc(
     {
         secondaryControllers.push_back(cntrl->path);
     }
-
-    std::vector<Association> associations;
-    for (const auto& subsys : subsystems)
-    {
-        associations.emplace_back("storage", "storage_controller", subsys);
-    }
-
-    for (const auto& cntrl : secondaryControllers)
-    {
-        associations.emplace_back("secondary", "primary", cntrl);
-    }
-
-    if (assocIntf)
-    {
-        assocIntf->set_property("Associations", associations);
-    }
-}
-
-void NVMeController::addSubsystemAssociation(const std::string& subsysPath)
-{
-    subsystems.push_back(subsysPath);
-
-    std::vector<Association> associations;
-    for (const auto& subsys : subsystems)
-    {
-        associations.emplace_back("storage", "storage_controller", subsys);
-    }
-
-    for (const auto& cntrl : secondaryControllers)
-    {
-        associations.emplace_back("secondary", "primary", cntrl);
-    }
-
-    if (assocIntf)
-    {
-        assocIntf->set_property("Associations", associations);
-    }
+    updateAssociation();
 }
 
 void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,

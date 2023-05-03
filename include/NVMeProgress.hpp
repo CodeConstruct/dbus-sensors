@@ -48,9 +48,10 @@ class NVMeCreateVolumeProgress : public NVMeProgress
     /* Returns the volume path if successful, or empty otherwise */
     std::string volumePath() const;
 
+    const std::string path;
+
   private:
     std::shared_ptr<sdbusplus::asio::connection> conn;
-    std::string path;
 
     // interfaces are added only once the state is set to success/failure
     std::shared_ptr<CreateVolumeProgressSuccess> success;

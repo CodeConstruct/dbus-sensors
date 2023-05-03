@@ -7,7 +7,19 @@
 
 #include <filesystem>
 
-void NVMeSubsystem::createStorageAssociation()
+void NVMeSubsystem::createAssociation()
+{
+    assocIntf = objServer.add_interface(path, association::interface);
+    assocIntf->register_property("Associations", makeAssociation());
+    assocIntf->initialize();
+}
+
+void NVMeSubsystem::updateAssociation()
+{
+    assocIntf->set_property("Associations", makeAssociation());
+}
+
+std::vector<Association> NVMeSubsystem::makeAssociation() const
 {
     std::vector<Association> associations;
     std::filesystem::path p(path);
@@ -16,11 +28,17 @@ void NVMeSubsystem::createStorageAssociation()
     associations.emplace_back("chassis", "drive", p.parent_path().string());
     associations.emplace_back("drive", "storage", path);
 
-    assocIntf = objServer.add_interface(path, association::interface);
+    for (auto& [_, prog] : createProgress)
+    {
+        associations.emplace_back("awaiting", "awaited", prog->path);
+    }
 
-    assocIntf->register_property("Associations", associations);
+    for (auto& [_, vol] : volumes)
+    {
+        associations.emplace_back("containing", "contained", vol->path);
+    }
 
-    assocIntf->initialize();
+    return associations;
 }
 
 // get temporature from a NVMe Basic reading.
@@ -55,7 +73,7 @@ NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
                              const SensorData& configData, NVMeIntf intf) :
     NVMeStorage(objServer, *dynamic_cast<sdbusplus::bus_t*>(conn.get()),
                 path.c_str()),
-    io(io), objServer(objServer), conn(conn), path(path), name(name),
+    path(path), io(io), objServer(objServer), conn(conn), name(name),
     config(configData), nvmeIntf(intf), status(Status::Stop),
     drive(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str())
 {}
@@ -90,7 +108,7 @@ void NVMeSubsystem::init()
 
     /* xyz.openbmc_project.Inventory.Item.Storage */
     // make association for Drive/Storage/Chassis
-    createStorageAssociation();
+    createAssociation();
 }
 
 NVMeSubsystem::~NVMeSubsystem()
@@ -247,7 +265,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 {
                     auto nvmeController = std::make_shared<NVMeController>(
                         self->io, self->objServer, self->conn, path.string(),
-                        nvme, c);
+                        nvme, c, self->weak_from_this());
 
                     // insert the controllers with empty plugin
                     auto [iter, _] = self->controllers.insert(
@@ -260,9 +278,6 @@ void NVMeSubsystem::markFunctional(bool toggle)
                         ctrlPlugin = self->plugin->createControllerPlugin(
                             *nvmeController, self->config);
                     }
-
-                    // set StorageController Association
-                    nvmeController->addSubsystemAssociation(self->path);
                 }
                 catch (const std::exception& e)
                 {
@@ -686,6 +701,8 @@ sdbusplus::message::object_path
         throw std::logic_error("duplicate progress id");
     }
 
+    updateAssociation();
+
     // #4
     return prog_path;
 }
@@ -721,6 +738,7 @@ void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
             NVMeVolume::create(objServer, conn, shared_from_this(), new_ns);
         volumes.insert({new_ns, vol});
         prog->createSuccess(vol);
+        updateAssociation();
     }
     catch (const std::exception& e)
     {
@@ -837,6 +855,78 @@ void NVMeSubsystem::updateVolumes()
         });
 }
 
+std::vector<uint32_t> NVMeSubsystem::attachedVolumes(uint16_t ctrlId) const
+{
+    std::vector<uint32_t> vols;
+
+    if (!controllers.contains(ctrlId))
+    {
+        std::cerr << "attachedVolumes bad controller " << ctrlId << std::endl;
+        return vols;
+    }
+
+    try
+    {
+        std::ranges::copy(attached.at(ctrlId), std::back_inserter(vols));
+    }
+    catch (std::out_of_range&)
+    {
+        // no volumes attached
+    }
+    return vols;
+}
+
+void NVMeSubsystem::attachCtrlVolume(uint16_t c, uint32_t ns)
+{
+    if (!controllers.contains(c))
+    {
+        std::cerr << "attachCtrlVolume bad controller " << c << std::endl;
+        return;
+    }
+    if (!volumes.contains(ns))
+    {
+        std::cerr << "attachCtrlVolume bad ns " << ns << std::endl;
+        return;
+    }
+    attached[c].insert(ns);
+    std::cout << name << " attached insert " << c << " " << ns << "\n";
+    controllers[c].first->updateAssociation();
+}
+
+void NVMeSubsystem::detachCtrlVolume(uint16_t c, uint32_t ns)
+{
+    if (!controllers.contains(c))
+    {
+        std::cerr << "detachCtrlVolume bad controller " << c << std::endl;
+        return;
+    }
+    if (!volumes.contains(ns))
+    {
+        std::cerr << "detachCtrlVolume bad ns " << ns << std::endl;
+        return;
+    }
+    attached[c].erase(ns);
+    std::cout << name << " attached erase " << c << " " << ns << "\n";
+    controllers[c].first->updateAssociation();
+}
+
+void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
+{
+    if (!volumes.contains(ns))
+    {
+        std::cerr << "detachAllCtrlVolume bad ns " << ns << std::endl;
+        return;
+    }
+    // remove from attached controllers list
+    for (auto& [c, attach_vols] : attached)
+    {
+        if (attach_vols.erase(ns) == 1)
+        {
+            controllers[c].first->updateAssociation();
+        }
+    }
+}
+
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
                                  std::shared_ptr<NVMeVolume> volume)
 {
@@ -875,4 +965,6 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
     {
         throw std::runtime_error("volume disappeared unexpectedly");
     }
+
+    updateAssociation();
 }

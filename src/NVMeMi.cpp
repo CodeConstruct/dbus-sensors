@@ -461,6 +461,7 @@ void NVMeMi::adminIdentify(
                     rc = nvme_mi_admin_identify(ctrl, &args);
                 }
             }
+
             if (rc < 0)
             {
                 std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
@@ -485,6 +486,13 @@ void NVMeMi::adminIdentify(
                     cb(std::make_error_code(std::errc::bad_message), {});
                 });
                 return;
+            }
+
+            auto ex = makeLibNVMeError(errno, rc, "adminIdentify");
+            if (ex)
+            {
+                fprintf(stderr, "fail to do nvme identify cns 0x%x: %s\n", cns,
+                        ex->description());
             }
 
             self->io.post([cb{std::move(cb)}, data{std::move(data)}]() mutable {
