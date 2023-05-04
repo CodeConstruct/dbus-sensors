@@ -1433,3 +1433,56 @@ void NVMeMi::adminDeleteNamespace(
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1); });
     }
 }
+
+void NVMeMi::adminListNamespaces(
+    nvme_mi_ctrl_t ctrl,
+    std::function<void(nvme_ex_ptr, std::vector<uint32_t> ns)>&& cb)
+{
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, cb{std::move(cb)}]() {
+        int status, nvme_errno;
+        std::vector<uint32_t> ns;
+        // sanity in case of bad drives, allows for >1million NSes
+        const int MAX_ITER = 1000;
+
+        for (int i = 0; i < MAX_ITER; i++)
+        {
+            struct nvme_ns_list list;
+            uint32_t start = NVME_NSID_NONE;
+            if (!ns.empty())
+            {
+                start = ns.back() + 1;
+            }
+            status =
+                nvme_mi_admin_identify_allocated_ns_list(ctrl, start, &list);
+            nvme_errno = errno;
+            if (status != 0)
+            {
+                ns.clear();
+                break;
+            }
+
+            for (size_t i = 0; i < NVME_ID_NS_LIST_MAX; i++)
+            {
+                if (!list.ns[i])
+                {
+                    break;
+                }
+                ns.push_back(list.ns[i]);
+            }
+            if (list.ns[NVME_ID_NS_LIST_MAX - 1] == 0)
+            {
+                // all entries read
+                break;
+            }
+        }
+
+        auto ex = makeLibNVMeError(nvme_errno, status, "adminListNamespaces");
+        self->io.post([cb{std::move(cb)}, ex, ns]() { cb(ex, ns); });
+    });
+    if (post_err)
+    {
+        auto ex = makeLibNVMeError("post failed");
+        io.post([cb{std::move(cb)}, ex]() { cb(ex, std::vector<uint32_t>()); });
+    }
+}

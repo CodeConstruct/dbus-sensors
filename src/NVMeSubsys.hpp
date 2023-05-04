@@ -123,6 +123,10 @@ class NVMeSubsystem :
     void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
                               uint32_t new_ns);
 
+    void addIdentifyNamespace(uint32_t nsid);
+
+    void updateVolumes();
+
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;
     static constexpr unsigned UnavailableMaxCount = 60;

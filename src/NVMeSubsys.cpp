@@ -160,6 +160,9 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
         plugin->start();
     }
     status = Status::Start;
+    
+    // TODO: may need to wait for this to complete?
+    updateVolumes();
 }
 
 void NVMeSubsystem::markFunctional(bool toggle)
@@ -613,6 +616,9 @@ void NVMeSubsystem::fallbackNoSecondary()
         pair.first->start(pair.second);
     }
     status = Status::Start;
+
+    // TODO: may need to wait for this to complete?
+    updateVolumes();
 }
 
 sdbusplus::message::object_path
@@ -726,6 +732,109 @@ void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
 std::string NVMeSubsystem::volumePath(uint32_t nsid) const
 {
     return path + "/volumes/" + std::to_string(nsid);
+}
+
+void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+    intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS,
+                        nsid, NVME_CNTLID_NONE,
+                        [self{shared_from_this()}, intf, ctrl,
+                         nsid](nvme_ex_ptr ex, std::span<uint8_t> data) {
+        if (ex)
+        {
+            std::cerr << "Error adding volume for nsid " << nsid << ": " << ex
+                      << "\n";
+            return;
+        }
+
+        nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
+
+        // msb 6:5 and lsb 3:0
+        size_t lbaf_index = ((id.flbas >> 1) & 0x30) | (id.flbas & 0x0f);
+        size_t blockSize = 1ul << id.lbaf[lbaf_index].ds;
+        bool metadataAtEnd = id.flbas & (1 << 4);
+
+        NVMeNSIdentify ns = {
+            .namespaceId = nsid,
+            .size = ::le64toh(id.nsze * blockSize),
+            .capacity = ::le64toh(id.ncap * blockSize),
+            .blockSize = blockSize,
+            .lbaFormat = lbaf_index,
+            .metadataAtEnd = metadataAtEnd,
+        };
+
+        self->addVolume(ns);
+
+        // determine attached controllers
+        intf->adminIdentify(
+            ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS_CTRL_LIST, nsid,
+            NVME_CNTLID_NONE,
+            [self, nsid](nvme_ex_ptr ex, std::span<uint8_t> data) {
+            if (ex)
+            {
+                std::cerr << "Error fetching attached controller list for nsid "
+                          << nsid << ": " << ex << "\n";
+                return;
+            }
+
+            nvme_ctrl_list& list =
+                *reinterpret_cast<nvme_ctrl_list*>(data.data());
+            uint16_t num = ::le16toh(list.num);
+            if (num == NVME_ID_CTRL_LIST_MAX)
+            {
+                std::cerr << "Warning: full ctrl list returned\n";
+            }
+
+            for (auto i = 0; i < num; i++)
+            {
+                uint16_t c = ::le16toh(list.identifier[i]);
+                self->attachCtrlVolume(c, nsid);
+            }
+            });
+    });
+}
+
+void NVMeSubsystem::updateVolumes()
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+    intf->adminListNamespaces(
+        ctrl, [ctrl, intf, self{shared_from_this()}](
+                  nvme_ex_ptr ex, std::vector<uint32_t> ns) mutable {
+            if (ex)
+            {
+                std::cerr << "list namespaces failed: " << ex << "\n";
+                return;
+            }
+
+            std::vector<uint32_t> existing;
+            for (auto& [n, _] : self->volumes)
+            {
+                existing.push_back(n);
+            }
+
+            std::vector<uint32_t> additions;
+            std::vector<uint32_t> deletions;
+
+            // namespace lists are ordered
+            std::set_difference(ns.begin(), ns.end(), existing.begin(),
+                                existing.end(), std::back_inserter(additions));
+
+            std::set_difference(existing.begin(), existing.end(), ns.begin(),
+                                ns.end(), std::back_inserter(deletions));
+
+            for (auto n : deletions)
+            {
+                self->forgetVolume(self->volumes.find(n)->second);
+            }
+
+            for (auto n : additions)
+            {
+                self->addIdentifyNamespace(n);
+            }
+        });
 }
 
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,

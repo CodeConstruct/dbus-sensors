@@ -220,6 +220,17 @@ class NVMeMiIntf
         std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
 
     /**
+     * listNamespaces() - return list of NSIDs
+     *
+     * @cb will be called on success or failure. On success @ns will
+     * contain the list of NSIDs in sequential order, including inactive
+     * namespaces.
+     */
+    virtual void adminListNamespaces(
+        nvme_mi_ctrl_t ctrl,
+        std::function<void(nvme_ex_ptr ex, std::vector<uint32_t> ns)>&& cb) = 0;
+
+    /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to
      * @admin_req: request header
