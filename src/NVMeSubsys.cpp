@@ -313,9 +313,9 @@ void NVMeSubsystem::markFunctional(bool toggle)
             nvme->adminIdentify(
                 ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_SECONDARY_CTRL_LIST,
                 0, 0,
-                [self{self->shared_from_this()}](const std::error_code& ec,
+                [self{self->shared_from_this()}](nvme_ex_ptr ex,
                                                  std::span<uint8_t> data) {
-                if (ec || data.size() < sizeof(nvme_secondary_ctrl_list))
+                if (ex || data.size() < sizeof(nvme_secondary_ctrl_list))
                 {
                     std::cerr << "fail to identify secondary controller list"
                               << std::endl;
@@ -331,7 +331,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     // fallback. This may need refiniing.
                     std::cerr << "Failed to identify secondary controller "
                                  "list. error "
-                              << ec << " data size " << data.size()
+                              << ex << " data size " << data.size()
                               << " expected size "
                               << sizeof(nvme_secondary_ctrl_list)
                               << ". Fallback, using arbitrary controller as "

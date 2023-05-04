@@ -404,13 +404,13 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
 
 void NVMeMi::adminIdentify(
     nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid, uint16_t cntid,
-    std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb)
+    std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb)
 {
     if (!nvmeEP)
     {
         std::cerr << "nvme endpoint is invalid" << std::endl;
         io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::no_such_device), {});
+            cb(makeLibNVMeError("nvme endpoint is invalid"), {});
         });
         return;
     }
@@ -468,11 +468,6 @@ void NVMeMi::adminIdentify(
                           << ", eid: " << static_cast<int>(self->eid) << "]"
                           << "fail to do nvme identify: "
                           << std::strerror(errno) << std::endl;
-                self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
-                    cb(std::make_error_code(static_cast<std::errc>(last_errno)),
-                       {});
-                });
-                return;
             }
             else if (rc > 0)
             {
@@ -482,22 +477,19 @@ void NVMeMi::adminIdentify(
                           << ", eid: " << static_cast<int>(self->eid) << "]"
                           << "fail to do nvme identify: " << errMsg
                           << std::endl;
-                self->io.post([cb{std::move(cb)}]() {
-                    cb(std::make_error_code(std::errc::bad_message), {});
-                });
-                return;
             }
 
             auto ex = makeLibNVMeError(errno, rc, "adminIdentify");
             if (ex)
             {
-                fprintf(stderr, "fail to do nvme identify cns 0x%x: %s\n", cns,
-                        ex->description());
+                std::cerr << "fail to do nvme identify: " << ex->description()
+                          << std::endl;
             }
 
-            self->io.post([cb{std::move(cb)}, data{std::move(data)}]() mutable {
+            self->io.post(
+                [cb{std::move(cb)}, ex, data{std::move(data)}]() mutable {
                 std::span<uint8_t> span{data.data(), data.size()};
-                cb({}, span);
+                cb(ex, span);
             });
         });
     }
@@ -506,9 +498,9 @@ void NVMeMi::adminIdentify(
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]" << e.what()
                   << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::no_such_device), {});
-        });
+        auto msg = std::string("Runtime error: ") + e.what();
+        std::cerr << msg << std::endl;
+        io.post([cb{std::move(cb)}, msg]() { cb(makeLibNVMeError(msg), {}); });
         return;
     }
 }

@@ -253,15 +253,15 @@ sdbusplus::message::unix_fd
         throw sdbusplus::xyz::openbmc_project::Common::File::Error::Open();
     }
 
-    nvmeIntf->adminIdentify(
-        nvmeCtrl, static_cast<nvme_identify_cns>(cns), nsid, cntid,
-        [self{shared_from_this()}, pipe](const std::error_code& ec,
-                                         std::span<uint8_t> data) {
+    nvmeIntf->adminIdentify(nvmeCtrl, static_cast<nvme_identify_cns>(cns), nsid,
+                            cntid,
+                            [self{shared_from_this()},
+                             pipe](nvme_ex_ptr ex, std::span<uint8_t> data) {
         ::close(pipe[0]);
         int fd = pipe[1];
-        if (ec)
+        if (ex)
         {
-            std::cerr << "fail to Identify: " << ec.message() << std::endl;
+            std::cerr << "fail to Identify: " << ex << std::endl;
             close(fd);
             return;
         }
@@ -271,7 +271,7 @@ sdbusplus::message::unix_fd
                       << std::endl;
         };
         close(fd);
-        });
+    });
     return sdbusplus::message::unix_fd{pipe[0]};
 }
 
