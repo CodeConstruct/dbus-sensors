@@ -1,6 +1,8 @@
 #include "NVMeSubsys.hpp"
 
 #include "AsioHelper.hpp"
+#include "NVMeDrive.hpp"
+#include "NVMeError.hpp"
 #include "NVMePlugin.hpp"
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"
@@ -75,8 +77,7 @@ NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
     NVMeStorage(objServer, *dynamic_cast<sdbusplus::bus_t*>(conn.get()),
                 path.c_str()),
     path(path), io(io), objServer(objServer), conn(conn), name(name),
-    config(configData), nvmeIntf(intf), status(Status::Stop),
-    drive(*dynamic_cast<sdbusplus::bus_t*>(conn.get()), path.c_str())
+    config(configData), nvmeIntf(intf), status(Status::Stop)
 {}
 
 // Performs initialisation after shared_from_this() has been set up.
@@ -99,15 +100,16 @@ void NVMeSubsystem::init()
         throw std::runtime_error("Unsupported NVMe interface");
     }
 
+    /* xyz.openbmc_project.Inventory.Item.Storage */
     NVMeStorage::init(
         std::static_pointer_cast<NVMeStorage>(shared_from_this()));
 
     /* xyz.openbmc_project.Inventory.Item.Drive */
-    drive.protocol(NVMeDrive::DriveProtocol::NVMe);
-    drive.type(NVMeDrive::DriveType::SSD);
+    drive = std::make_shared<NVMeDrive>(io, conn, path, weak_from_this());
+    drive->protocol(NVMeDrive::DriveProtocol::NVMe);
+    drive->type(NVMeDrive::DriveType::SSD);
     // TODO: update capacity
 
-    /* xyz.openbmc_project.Inventory.Item.Storage */
     // make association for Drive/Storage/Chassis
     createAssociation();
 }
@@ -1023,4 +1025,47 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
     checkLibNVMeError(err, nvme_status, "Delete");
 
     forgetVolume(volume);
+}
+
+// submitCb is called once the sanitize has been submitted
+void NVMeSubsystem::startSanitize(
+    const NVMeSanitizeParams& params,
+    std::function<void(nvme_ex_ptr ex)>&& submitCb)
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+
+    intf->adminSanitize(ctrl, params.nvmeAction(), params.passes,
+                        params.pattern, params.patternInvert,
+                        [submitCb](nvme_ex_ptr ex) { submitCb(ex); });
+}
+
+void NVMeSubsystem::sanitizeStatus(
+    std::function<void(nvme_ex_ptr ex, bool inProgress, bool failed,
+                       bool completed, uint16_t sstat, uint16_t sprog,
+                       uint32_t scdw10)>&& cb)
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+
+    intf->adminGetLogPage(
+        ctrl, NVME_LOG_LID_SANITIZE, NVME_NSID_NONE, 0, 0,
+        [self{shared_from_this()}, cb](const std::error_code& ec,
+                                       std::span<uint8_t> data) {
+        if (ec)
+        {
+            std::string msg = "GetLogPage failed: " + ec.message();
+            auto ex = makeLibNVMeError(msg);
+            cb(ex, false, false, false, 0, 0, 0);
+            return;
+        }
+
+        nvme_sanitize_log_page* log =
+            reinterpret_cast<nvme_sanitize_log_page*>(data.data());
+        uint8_t san_status = log->sstat & NVME_SANITIZE_SSTAT_STATUS_MASK;
+        cb(nvme_ex_ptr(), san_status == NVME_SANITIZE_SSTAT_STATUS_IN_PROGESS,
+           san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED,
+           san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETE_SUCCESS,
+           log->sstat, log->sprog, log->scdw10);
+        });
 }

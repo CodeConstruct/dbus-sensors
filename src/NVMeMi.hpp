@@ -92,6 +92,10 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         std::function<void(const std::error_code&, int nvme_status)>&& cb)
         override;
 
+    void adminSanitize(nvme_mi_ctrl_t ctrl, enum nvme_sanitize_sanact sanact,
+                       uint8_t passes, uint32_t pattern, bool invert_pattern,
+                       std::function<void(nvme_ex_ptr ex)>&& cb) override;
+
   private:
     // the transfer size for nvme mi messages.
     // define in github.com/linux-nvme/libnvme/blob/master/src/nvme/mi.c

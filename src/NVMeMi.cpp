@@ -1536,3 +1536,31 @@ void NVMeMi::adminAttachDetachNamespace(
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1); });
     }
 }
+
+void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
+                           enum nvme_sanitize_sanact sanact, uint8_t passes,
+                           uint32_t pattern, bool invert_pattern,
+                           std::function<void(nvme_ex_ptr ex)>&& cb)
+{
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, sanact, passes, pattern,
+                  invert_pattern, cb{std::move(cb)}]() {
+            struct nvme_sanitize_nvm_args args;
+            memset(&args, 0x0, sizeof(args));
+            args.args_size = sizeof(args);
+            args.sanact = sanact;
+            args.owpass = passes;
+            args.oipbp = invert_pattern;
+
+            int status = nvme_mi_admin_sanitize_nvm(ctrl, &args);
+            printf("san status %d errno %d\n", status, errno);
+
+            auto ex = makeLibNVMeError(errno, status, "adminSanitize");
+            self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
+        });
+    if (post_err)
+    {
+        auto ex = makeLibNVMeError("post failed");
+        io.post([cb{std::move(cb)}, ex]() { cb(ex); });
+    }
+}

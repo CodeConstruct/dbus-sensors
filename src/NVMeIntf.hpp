@@ -235,6 +235,11 @@ class NVMeMiIntf
         nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
         std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
 
+    virtual void adminSanitize(nvme_mi_ctrl_t ctrl,
+                               enum nvme_sanitize_sanact sanact, uint8_t passes,
+                               uint32_t pattern, bool invert_pattern,
+                               std::function<void(nvme_ex_ptr ex)>&& cb) = 0;
+
     /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to

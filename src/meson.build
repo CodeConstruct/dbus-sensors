@@ -200,6 +200,7 @@ if get_option('nvme').enabled()
         'NVMeController.cpp',
         'NVMeProgress.cpp',
         'NVMeVolume.cpp',
+        'NVMeDrive.cpp',
         'NVMeError.cpp',
     )
 

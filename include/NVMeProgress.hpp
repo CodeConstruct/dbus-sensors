@@ -1,6 +1,8 @@
 #pragma once
 
+#include "NVMeDrive.hpp"
 #include "NVMeError.hpp"
+#include "NVMeSubsys.hpp"
 #include "NVMeVolume.hpp"
 
 #include <boost/asio.hpp>
@@ -22,7 +24,7 @@ using CreateVolumeProgressFailure =
     sdbusplus::xyz::openbmc_project::Nvme::server::CreateVolumeProgressFailure;
 
 class NVMeProgress :
-    protected sdbusplus::xyz::openbmc_project::Common::server::Progress
+    public sdbusplus::xyz::openbmc_project::Common::server::Progress
 {
   public:
     NVMeProgress(std::shared_ptr<sdbusplus::asio::connection> conn,

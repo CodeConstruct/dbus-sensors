@@ -51,6 +51,13 @@ class NVMeSubsystem :
     std::shared_ptr<NVMeVolume>
         getVolume(const sdbusplus::message::object_path& volPath) const;
 
+    void startSanitize(const NVMeSanitizeParams& params,
+                       std::function<void(nvme_ex_ptr ex)>&& submitCb);
+    void sanitizeStatus(
+        std::function<void(nvme_ex_ptr ex, bool inProgress, bool failed,
+                           bool completed, uint16_t sstat, uint16_t sprog,
+                           uint32_t scdw10)>&& cb);
+
     const std::string path;
 
   private:
@@ -89,7 +96,7 @@ class NVMeSubsystem :
     /*
     Drive interface: xyz.openbmc_project.Inventory.Item.Drive
     */
-    NVMeDrive drive;
+    std::shared_ptr<NVMeDrive> drive;
 
     // map from cntrlid to a pair of {controller, controller_plugin}
     std::map<uint16_t, std::pair<std::shared_ptr<NVMeController>,
@@ -132,7 +139,7 @@ class NVMeSubsystem :
 
     sdbusplus::message::object_path
         createVolume(boost::asio::yield_context yield, uint64_t size,
-                     size_t lbaFormat, bool metadataAtEnd);
+                     size_t lbaFormat, bool metadataAtEnd) override;
 
     // callback when drive completes. not called in dbus method context.
     void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
