@@ -2,26 +2,38 @@
 
 #include "NVMeError.hpp"
 
+#include <boost/asio.hpp>
+#include <sdbusplus/asio/connection.hpp>
+#include <sdbusplus/asio/object_server.hpp>
 #include <xyz/openbmc_project/Inventory/Item/Storage/server.hpp>
+#include <xyz/openbmc_project/Nvme/Storage/server.hpp>
 
 #include <memory>
 
 using StorageBase =
     sdbusplus::xyz::openbmc_project::Inventory::Item::server::Storage;
+using RelPerf =
+    sdbusplus::common::xyz::openbmc_project::nvme::Storage::RelativePerformance;
+
+struct LBAFormat
+{
+    size_t index;
+    // in bytes
+    size_t blockSize;
+    // in bytes
+    size_t metadataSize;
+    RelPerf relativePerformance;
+};
+
+RelPerf relativePerformanceFromRP(uint8_t rp);
+
 class NVMeStorage : public StorageBase
 {
   public:
     NVMeStorage(sdbusplus::asio::object_server& objServer,
-                sdbusplus::bus_t& bus, const char* path) :
-        StorageBase(bus, path),
-        objServer(objServer), path(path)
-    {}
+                sdbusplus::bus_t& bus, const char* path);
 
-    ~NVMeStorage() override
-    {
-        objServer.remove_interface(nvmeStorageInterface);
-        emit_removed();
-    }
+    ~NVMeStorage() override;
 
     virtual sdbusplus::message::object_path
         createVolume(boost::asio::yield_context yield, uint64_t size,
@@ -29,25 +41,10 @@ class NVMeStorage : public StorageBase
 
   protected:
     // Called by parent class for setup after shared_ptr has been initialised
-    static void init(std::shared_ptr<NVMeStorage> self)
-    {
-        self->nvmeStorageInterface = self->objServer.add_interface(
-            self->path, "xyz.openbmc_project.Nvme.Storage");
-        self->nvmeStorageInterface->register_method(
-            "CreateVolume", [weak{std::weak_ptr<NVMeStorage>(self)}](
-                                boost::asio::yield_context yield, uint64_t size,
-                                size_t lbaFormat, bool metadataAtEnd) {
-                if (auto self = weak.lock())
-                {
-                    return self->createVolume(yield, size, lbaFormat,
-                                              metadataAtEnd);
-                }
-                throw *makeLibNVMeError("storage removed");
-            });
-        self->nvmeStorageInterface->initialize();
+    // Will complete asynchronously.
+    static void init(std::shared_ptr<NVMeStorage> self);
 
-        self->emit_added();
-    }
+    void setSupportedFormats(const std::vector<LBAFormat>& formats);
 
   private:
     // NVMe-specific interface.

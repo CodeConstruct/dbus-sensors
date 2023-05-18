@@ -184,6 +184,8 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
     
     // TODO: may need to wait for this to complete?
     updateVolumes();
+
+    querySupportedFormats();
 }
 
 void NVMeSubsystem::markFunctional(bool toggle)
@@ -999,6 +1001,49 @@ void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
     }
 
     updateAssociation();
+}
+
+void NVMeSubsystem::querySupportedFormats()
+{
+
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+    intf->adminIdentify(
+        ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS, NVME_NSID_ALL,
+        NVME_CNTLID_NONE,
+        [self{shared_from_this()}](nvme_ex_ptr ex, std::span<uint8_t> data) {
+        if (ex)
+        {
+            std::cerr << self->name << ": Error getting LBA formats :" << ex
+                      << "\n";
+            return;
+        }
+
+        nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
+
+        size_t nlbaf = id.nlbaf;
+        if (nlbaf > 64)
+        {
+            std::cerr << self->name << ": Bad nlbaf " << nlbaf << "\n";
+            return;
+        }
+
+        std::cerr << self->name << ": Got nlbaf " << nlbaf << "\n";
+        std::vector<LBAFormat> formats;
+        for (size_t i = 0; i < nlbaf; i++)
+        {
+            size_t blockSize = 1ul << id.lbaf[i].ds;
+            size_t metadataSize = id.lbaf[i].ms;
+            RelPerf rp = relativePerformanceFromRP(id.lbaf[i].rp);
+            std::cerr << self->name << ": lbaf " << i << " blocksize "
+                      << blockSize << "\n";
+            formats.push_back({.index = i,
+                               .blockSize = blockSize,
+                               .metadataSize = metadataSize,
+                               .relativePerformance = rp});
+        }
+        self->setSupportedFormats(formats);
+        });
 }
 
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,

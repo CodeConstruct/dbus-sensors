@@ -156,6 +156,8 @@ class NVMeSubsystem :
     // may throw if the volume exists.
     std::shared_ptr<NVMeVolume> addVolume(const NVMeNSIdentify& ns);
 
+    void querySupportedFormats();
+
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;
     static constexpr unsigned UnavailableMaxCount = 60;

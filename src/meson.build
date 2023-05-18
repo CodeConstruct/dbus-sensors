@@ -202,6 +202,7 @@ if get_option('nvme').enabled()
         'NVMeVolume.cpp',
         'NVMeDrive.cpp',
         'NVMeError.cpp',
+        'NVMeStorage.cpp',
     )
 
     pdi_dep = dependency ('phosphor-dbus-interfaces')

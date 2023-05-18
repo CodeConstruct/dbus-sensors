@@ -1346,7 +1346,8 @@ void NVMeMi::createNamespace(
             auto msg =
                 std::string("Size must be a multiple of the block size ") +
                 std::to_string(block_size);
-            submitted_cb(std::make_shared<NVMeSdBusPlusError>(msg));
+            submitted_cb(makeLibNVMeError(
+                msg, std::make_shared<CommonErr::InvalidArgument>()));
             return;
         }
 
