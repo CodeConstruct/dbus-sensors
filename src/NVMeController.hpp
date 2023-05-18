@@ -59,6 +59,14 @@ class NVMeController
     }
 
     /**
+     * @brief Get the NVMe controller handle
+     */
+    nvme_mi_ctrl_t getMiCtrl() const
+    {
+        return nvmeCtrl;
+    }
+
+    /**
      * @brief Register the NVMe subsystem to the controller. The function can be
      * called mutiple times to associate multi-subsys to a single controller.
      *

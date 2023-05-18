@@ -614,3 +614,116 @@ void NVMeSubsystem::fallbackNoSecondary()
     }
     status = Status::Start;
 }
+
+sdbusplus::message::object_path
+    NVMeSubsystem::createVolume(boost::asio::yield_context yield, uint64_t size,
+                                size_t lbaFormat, bool metadataAtEnd)
+{
+    // #0 (sequence of runtime/callbacks)
+    auto prog_id = getRandomId();
+
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+
+    using submit_callback_t = void(std::tuple<nvme_ex_ptr>);
+    auto [ex] = boost::asio::async_initiate<boost::asio::yield_context,
+                                            submit_callback_t>(
+        [weak{weak_from_this()}, prog_id, intf, ctrl, size, lbaFormat,
+         metadataAtEnd](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+
+        // #1
+        intf->createNamespace(
+            ctrl, size, lbaFormat, metadataAtEnd,
+
+            // submitted_cb
+            [h](nvme_ex_ptr ex) mutable {
+            // #2
+
+            // Async completion of the createNamespace call.
+            // The actual nvme_mi_admin_ns_mgmt_create() call is still running
+            // in a separate thread. Pass the error status back out.
+            h(std::make_tuple(ex));
+            },
+
+            // finished_cb
+            [weak, prog_id](nvme_ex_ptr ex, uint32_t new_ns) mutable {
+            // #5. This will only be called once #4 completes.
+            // It will not be called if the submit failed.
+            auto self = weak.lock();
+            if (!self)
+            {
+                std::cerr << "createNamespace completed while nvmesensor was "
+                             "exiting\n";
+                return;
+            }
+            // The NS create has completed (either successfully or not)
+            self->createVolumeFinished(prog_id, ex, new_ns);
+        });
+        },
+        yield);
+
+    // #3
+
+    // Exception must be thrown outside of the async block
+    if (ex)
+    {
+        throw *ex;
+    }
+
+    // Progress endpoint for clients to poll, if the submit was successful.
+    std::string prog_path = path + "/CreateProgress/" + prog_id;
+
+    auto prog = std::make_shared<NVMeCreateVolumeProgress>(conn, prog_path);
+    if (!createProgress.insert({prog_id, prog}).second)
+    {
+        throw std::logic_error("duplicate progress id");
+    }
+
+    // #4
+    return prog_path;
+}
+
+void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
+                                         uint32_t new_ns)
+{
+    try
+    {
+        auto p = createProgress.find(prog_id);
+        if (p == createProgress.end())
+        {
+            throw std::logic_error("Missing progress entry");
+        }
+        auto prog = p->second;
+
+        if (ex)
+        {
+            prog->createFailure(ex);
+            return;
+        }
+
+        if (volumes.contains(new_ns))
+        {
+            std::string err_msg = std::string("Internal error, NSID exists " +
+                                              std::to_string(new_ns));
+            std::cerr << err_msg << "\n";
+            prog->createFailure(makeLibNVMeError(err_msg));
+            return;
+        }
+
+        auto vol =
+            NVMeVolume::create(objServer, conn, shared_from_this(), new_ns);
+        volumes.insert({new_ns, vol});
+        prog->createSuccess(vol);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Unhandled error in createVolumeFinished: " << e.what()
+                  << "\n";
+    }
+}
+
+std::string NVMeSubsystem::volumePath(uint32_t nsid) const
+{
+    return path + "/volumes/" + std::to_string(nsid);
+}

@@ -198,6 +198,8 @@ if get_option('nvme').enabled()
         'NVMeSubsys.cpp',
         'NVMeMi.cpp',
         'NVMeController.cpp',
+        'NVMeProgress.cpp',
+        'NVMeVolume.cpp',
         'NVMeError.cpp',
     )
 

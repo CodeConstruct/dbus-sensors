@@ -69,6 +69,11 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
         std::function<void(const std::error_code&, int nvme_status,
                            uint32_t comption_dw0)>&& cb);
+    void createNamespace(nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
+                         bool metadata_at_end,
+                         std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+                         std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&&
+                             finished_cb) override;
 
   private:
     // the transfer size for nvme mi messages.
@@ -147,4 +152,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         nvme_mi_ctrl_t ctrl, bool host, uint64_t offset,
         std::vector<uint8_t>&& data,
         std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb);
+
+    size_t getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format);
 };

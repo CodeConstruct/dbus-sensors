@@ -1,6 +1,9 @@
 #include "NVMeMi.hpp"
 
+#include "NVMeError.hpp"
 #include "NVMeUtil.hpp"
+
+#include <endian.h>
 
 #include <boost/endian.hpp>
 
@@ -1282,5 +1285,130 @@ void NVMeMi::adminNonDataCmd(
                   << "adminNonDataCmd post failed: " << post_err
                   << std::endl;
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, 0); });
+    }
+}
+
+/* throws a nvme_ex_ptr on failure */
+size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
+{
+    struct nvme_id_ns id;
+    printf("getblocksize\n");
+    int status = nvme_mi_admin_identify_ns(ctrl, NVME_NSID_ALL, &id);
+    auto e = makeLibNVMeError(errno, status, "getBlockSize");
+    if (e)
+    {
+        throw e;
+    }
+
+    printf("nlbaf %d, lbaf %d\n", (int)id.nlbaf, (int)lba_format);
+
+    // Sanity check for the value from the drive
+    size_t max_lbaf = std::min(63, (int)id.nlbaf);
+
+    // NLBAF is the maximum allowed index (not a count)
+    if (lba_format > max_lbaf)
+    {
+        throw makeLibNVMeError("LBA format out of range, maximum is " +
+                                   std::to_string(max_lbaf),
+                               std::make_shared<CommonErr::InvalidArgument>());
+    }
+
+    return 1 << id.lbaf[lba_format].ds;
+}
+
+/*
+ finished_cb will not be called if submitted_cb is called with a failure.
+ */
+void NVMeMi::createNamespace(
+    nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format, bool metadata_at_end,
+    std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+    std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&& finished_cb)
+{
+    printf("createns %d\n", (int)gettid());
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, size, lba_format,
+                  metadata_at_end, submitted_cb{std::move(submitted_cb)},
+                  finished_cb{std::move(finished_cb)}]() {
+            size_t block_size;
+
+            try
+            {
+                block_size = self->getBlockSize(ctrl, lba_format);
+            }
+            catch (nvme_ex_ptr e)
+            {
+                submitted_cb(e);
+                return;
+            }
+
+            if (size % block_size != 0)
+            {
+                auto msg =
+                    std::string("Size must be a multiple of the block size ") +
+                    std::to_string(block_size);
+                submitted_cb(std::make_shared<NVMeSdBusPlusError>(msg));
+                return;
+            }
+
+            uint64_t blocks = size / block_size;
+
+            // TODO: this will become nvme_ns_mgmt_host_sw_specified in a newer
+            // libnvme.
+            struct nvme_id_ns data;
+            uint32_t new_ns = 0;
+
+            uint8_t flbas = 0;
+            if (metadata_at_end)
+            {
+                flbas |= (1 << 4);
+            }
+            // low 4 bits at 0:3
+            flbas |= (lba_format & 0xf);
+            // high 2 bits at 5:6
+            flbas |= ((lba_format & 0x30) << 1);
+
+            memset(&data, 0x0, sizeof(data));
+            data.nsze = ::htole64(blocks);
+            data.ncap = ::htole64(blocks);
+            data.flbas = flbas;
+
+            printf("verified %d\n", (int)gettid());
+
+            // submission has been verified.
+            submitted_cb(nvme_ex_ptr());
+            printf("after submitted_cb %d\n", (int)gettid());
+
+            int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_ns);
+            nvme_ex_ptr e = makeLibNVMeError(errno, status, "createVolume");
+
+            self->io.post([finished_cb{std::move(finished_cb)}, e, new_ns]() {
+                finished_cb(e, new_ns);
+            });
+
+#if 0
+        // TODO testing purposes
+        static uint32_t counter = 20;
+
+        printf("createNamespace top, sleeping 5 seconds\n");
+        sleep(5);
+
+        uint32_t new_ns = counter++;
+
+        printf("create complete. ns %d\n", new_ns);
+
+        auto err = std::make_error_code(static_cast<std::errc>(0));
+        cb(err, 0, new_ns);
+#endif
+        });
+
+    printf("submitted cb %d\n", (int)gettid());
+
+    if (post_err)
+    {
+        std::cerr << "adminAttachDetachNamespace post failed: " << post_err
+                  << std::endl;
+        auto e = makeLibNVMeError(post_err, -1, "createVolume");
+        io.post(
+            [submitted_cb{std::move(submitted_cb)}, e]() { submitted_cb(e); });
     }
 }

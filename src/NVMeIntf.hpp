@@ -1,4 +1,7 @@
 #pragma once
+
+#include "NVMeError.hpp"
+
 #include <libnvme-mi.h>
 
 #include <functional>
@@ -205,6 +208,13 @@ class NVMeMiIntf
         uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
         std::function<void(const std::error_code&, int nvme_status,
                            uint32_t comption_dw0)>&& cb) = 0;
+
+    virtual void createNamespace(
+        nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
+        bool metadata_at_end,
+        std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+        std::function<void(nvme_ex_ptr ex, uint32_t new_ns)>&& finished_cb) = 0;
+
     /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to

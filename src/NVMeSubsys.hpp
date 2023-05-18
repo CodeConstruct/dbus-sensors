@@ -2,12 +2,16 @@
 #include "NVMeBasic.hpp"
 #include "NVMeController.hpp"
 #include "NVMeDrive.hpp"
+#include "NVMeProgress.hpp"
 #include "NVMeSensor.hpp"
 #include "NVMeStorage.hpp"
+#include "NVMeUtil.hpp"
 #include "Utils.hpp"
 
 class NVMeControllerPlugin;
 class NVMePlugin;
+class NVMeVolume;
+class NVMeCreateVolumeProgress;
 
 class NVMeSubsystem :
     public std::enable_shared_from_this<NVMeSubsystem>,
@@ -28,6 +32,14 @@ class NVMeSubsystem :
     void start();
 
     void stop();
+
+    /** @brief Returns the dbus path for a given volume.
+     *
+     *  @param[in] nsid - The NSID of the volume
+     *
+     *  @return path[std::string] - The dbus path for the volume.
+     */
+    std::string volumePath(uint32_t nsid) const;
 
   private:
     NVMeSubsystem(boost::asio::io_context& io,
@@ -73,6 +85,17 @@ class NVMeSubsystem :
                                  std::shared_ptr<NVMeControllerPlugin>>>
         controllers{};
 
+    /*
+    map of nsid to volumes
+    */
+    std::map<uint32_t, std::shared_ptr<NVMeVolume>> volumes;
+
+    /*
+    In-progress or completed create operations
+    */
+    std::unordered_map<std::string, std::shared_ptr<NVMeCreateVolumeProgress>>
+        createProgress;
+
     // controller to use for NVMe operations. Is a member of the controllers
     // map.
     std::shared_ptr<NVMeControllerEnabled> primaryController;
@@ -88,6 +111,14 @@ class NVMeSubsystem :
     void markAvailable(bool toggle);
 
     void fallbackNoSecondary();
+
+    sdbusplus::message::object_path
+        createVolume(boost::asio::yield_context yield, uint64_t size,
+                     size_t lbaFormat, bool metadataAtEnd);
+
+    // callback when drive completes. not called in dbus method context.
+    void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
+                              uint32_t new_ns);
 
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;
