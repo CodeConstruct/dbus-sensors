@@ -11,15 +11,18 @@ NVMeDrive::NVMeDrive(boost::asio::io_context& io,
                      std::weak_ptr<NVMeSubsystem> subsys) :
     DriveBase(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
     DriveErase(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
-    path(path), sanitizeTimer(io), io(io), subsys(subsys)
+    Asset(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()), path(path),
+    sanitizeTimer(io), io(io), subsys(subsys)
 {
     DriveBase::emit_added();
     DriveErase::emit_added();
+    Asset::emit_added();
 }
 
 NVMeDrive::~NVMeDrive()
 {
     sanitizeTimer.cancel();
+    Asset::emit_removed();
     DriveErase::emit_removed();
     DriveBase::emit_removed();
 }

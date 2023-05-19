@@ -30,12 +30,11 @@ std::shared_ptr<NVMeControllerEnabled>
 
 NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
     NVMeController(std::move(nvmeController)),
-    // StorageController(
-    //     dynamic_cast<sdbusplus::bus_t&>(*this->NVMeController::conn),
-    //     this->NVMeController::path.c_str()),
     NVMeAdmin(*this->NVMeController::conn, this->NVMeController::path.c_str(),
               {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
-              {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
+               {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}}),
+    SoftwareExtVersion(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
+    SoftwareVersion(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str())
 {}
 
 void NVMeControllerEnabled::init()
@@ -123,6 +122,8 @@ void NVMeControllerEnabled::init()
     // StorageController::emit_added();
 
     NVMeAdmin::emit_added();
+    SoftwareExtVersion::emit_added();
+    SoftwareVersion::emit_added();
 }
 
 void NVMeControllerEnabled::start(
@@ -382,6 +383,8 @@ NVMeControllerEnabled::~NVMeControllerEnabled()
 {
     objServer.remove_interface(securityInterface);
     objServer.remove_interface(passthruInterface);
+    SoftwareVersion::emit_removed();
+    SoftwareExtVersion::emit_removed();
     NVMeAdmin::emit_removed();
     // StorageController::emit_removed();
     objServer.remove_interface(ctrlInterface);

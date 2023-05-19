@@ -147,6 +147,7 @@ class NVMeSubsystem :
 
     void addIdentifyNamespace(uint32_t nsid);
 
+    void fillDrive();
     void updateVolumes();
 
     // removes state associated with the volume. Does not manipulate the drive.

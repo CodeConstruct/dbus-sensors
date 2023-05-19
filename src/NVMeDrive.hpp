@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <sdbusplus/asio/connection.hpp>
 #include <sdbusplus/asio/object_server.hpp>
+#include <xyz/openbmc_project/Inventory/Decorator/Asset/server.hpp>
 #include <xyz/openbmc_project/Inventory/Item/Drive/server.hpp>
 #include <xyz/openbmc_project/Inventory/Item/DriveErase/server.hpp>
 
@@ -15,6 +16,8 @@ using DriveErase =
     sdbusplus::xyz::openbmc_project::Inventory::Item::server::DriveErase;
 using EraseAction = sdbusplus::xyz::openbmc_project::Inventory::Item::server::
     DriveErase::EraseAction;
+using Asset =
+    sdbusplus::server::xyz::openbmc_project::inventory::decorator::Asset;
 
 class NVMeSubsystem;
 
@@ -41,6 +44,7 @@ class NVMeSanitizeParams
 class NVMeDrive :
     public DriveBase,
     public DriveErase,
+    public Asset,
     public std::enable_shared_from_this<NVMeDrive>
 {
   public:

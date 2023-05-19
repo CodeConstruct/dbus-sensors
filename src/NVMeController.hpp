@@ -9,8 +9,15 @@
 #include <sdbusplus/asio/object_server.hpp>
 #include <xyz/openbmc_project/Inventory/Item/StorageController/server.hpp>
 #include <xyz/openbmc_project/NVMe/NVMeAdmin/server.hpp>
+#include <xyz/openbmc_project/Software/ExtendedVersion/server.hpp>
+#include <xyz/openbmc_project/Software/Version/server.hpp>
 
 #include <utility>
+
+using SoftwareVersion =
+    sdbusplus::server::xyz::openbmc_project::software::Version;
+using SoftwareExtVersion =
+    sdbusplus::server::xyz::openbmc_project::software::ExtendedVersion;
 
 class NVMeControllerPlugin;
 class NVMeSubsystem;
@@ -120,6 +127,8 @@ class NVMeControllerEnabled :
     // private sdbusplus::xyz::openbmc_project::Inventory::Item::server::
     //     StorageController,
     private sdbusplus::xyz::openbmc_project::NVMe::server::NVMeAdmin,
+    public SoftwareExtVersion,
+    public SoftwareVersion,
     public std::enable_shared_from_this<NVMeControllerEnabled>
 
 {

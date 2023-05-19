@@ -195,3 +195,29 @@ void pollCtemp(
                                       std::move(delay), dataFetcher,
                                       dataProcessor));
 }
+
+// Strips space padding from a NVMe string, replaces invalid characters with
+// spaces.
+static inline std::string nvmeString(const char* data, size_t size)
+{
+    std::string s(data, size);
+
+    size_t n = s.find_last_not_of(' ');
+    if (n == std::string::npos)
+    {
+        s.clear();
+    }
+    else
+    {
+        s.resize(n + 1);
+    }
+
+    for (auto& c : s)
+    {
+        if (c < 0x20 || c > 0x7e)
+        {
+            c = ' ';
+        }
+    }
+    return s;
+}

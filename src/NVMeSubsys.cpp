@@ -182,6 +182,8 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
     }
     status = Status::Start;
     
+    fillDrive();
+
     // TODO: may need to wait for this to complete?
     updateVolumes();
 
@@ -857,6 +859,39 @@ void NVMeSubsystem::updateVolumes()
                 self->addIdentifyNamespace(n);
             }
         });
+}
+
+void NVMeSubsystem::fillDrive()
+{
+    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+    intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL,
+                        NVME_NSID_NONE, NVME_CNTLID_NONE,
+                        [self{shared_from_this()}, intf,
+                         ctrl](nvme_ex_ptr ex, std::span<uint8_t> data) {
+        if (ex)
+        {
+            std::cerr << self->name << ": Error for controller identify\n";
+            return;
+        }
+
+        nvme_id_ctrl& id = *reinterpret_cast<nvme_id_ctrl*>(data.data());
+        self->drive->serialNumber(nvmeString(id.sn, sizeof(id.sn)));
+        self->drive->model(nvmeString(id.mn, sizeof(id.mn)));
+
+        auto fwVer = nvmeString(id.fr, sizeof(id.fr));
+        if (!fwVer.empty())
+        {
+            // Formatting per
+            // https://gerrit.openbmc.org/c/openbmc/phosphor-dbus-interfaces/+/43458/2/xyz/openbmc_project/Software/Version.interface.yaml#47
+            // TODO find/write a better reference
+            std::string v("xyz.openbmc_project.NVMe.ControllerFirmwareVersion");
+            self->primaryController->version(v);
+            self->primaryController->purpose(
+                SoftwareVersion::VersionPurpose::Other);
+            self->primaryController->extendedVersion(v + ":" + fwVer);
+        }
+    });
 }
 
 std::shared_ptr<NVMeVolume> NVMeSubsystem::getVolume(
