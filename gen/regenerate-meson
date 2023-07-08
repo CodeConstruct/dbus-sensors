@@ -1,0 +1,4 @@
+#!/bin/bash
+cd "$(dirname "$0")" || exit
+export PATH="/opt/bmc/sources/sdbusplus/tools:${PATH}"
+exec sdbus++-gen-meson --command meson --directory ../yaml --output .

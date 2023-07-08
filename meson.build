@@ -54,6 +54,11 @@ if not sdbusplus.found()
   sdbusplus = sdbusplus.as_system('system')
 endif
 
+sdbusplus_dep = dependency('sdbusplus')
+sdbuspp_gen_meson_prog = find_program('sdbus++-gen-meson', native: true)
+sdbusplusplus_prog = find_program('sdbus++', native: true)
+sdbusplusplus_depfiles = files()
+
 phosphor_logging_dep = dependency('phosphor-logging')
 
 if cpp.has_header('nlohmann/json.hpp')
@@ -90,6 +95,44 @@ default_deps = [
     sdbusplus,
     uring,
 ]
+
+generated_sources = []
+generated_others = []
+yaml_sources = []
+subdir('gen')
+subdir('gen/xyz')
+
+nvme_dbus_includes = include_directories('gen')
+
+phosphor_dbus_interfaces_dep = dependency('phosphor-dbus-interfaces')
+
+nvme_dbus_deps = [
+  phosphor_dbus_interfaces_dep,
+  sdbusplus_dep,
+]
+
+nvme_dbus_lib = static_library(
+  'nvme_dbus',
+  generated_sources,
+  implicit_include_directories: false,
+  include_directories: nvme_dbus_includes,
+  dependencies: nvme_dbus_deps)
+
+generated_files_headers = []
+foreach s : generated_sources
+    foreach f : s.to_list()
+        p = f.full_path()
+        if p.endswith('.hpp')
+            generated_files_headers += f
+        endif
+    endforeach
+endforeach
+
+nvme_dbus_dep = declare_dependency(
+  sources: generated_files_headers,
+  include_directories: nvme_dbus_includes,
+  link_with: nvme_dbus_lib,
+  dependencies: nvme_dbus_deps)
 
 subdir('service_files')
 subdir('src')

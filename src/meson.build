@@ -212,16 +212,10 @@ if get_option('nvme').enabled()
         include_type: 'system'
     )
 
-    libnvme_vu = dependency('libnvme-interface', 
-        required : true,
-        fallback : ['libnvme-vu', 'nvme_intf_dep'],
-        include_type: 'system'
-    )
-
     nvme_deps = [ 
         default_deps, i2c, thresholds_dep, utils_dep, 
         threads, pdi_dep, libnvme, libnvme_mi,
-        libnvme_vu
+        nvme_dbus_dep
     ]
 
     executable(
@@ -230,6 +224,7 @@ if get_option('nvme').enabled()
         dependencies: nvme_deps,
         cpp_args: ['-frtti', '-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
         install: true,
+        include_directories: nvme_dbus_includes,
     )
 endif
 
