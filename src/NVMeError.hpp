@@ -35,10 +35,8 @@ class NVMeSdBusPlusError : public sdbusplus::exception_t
 using nvme_ex_ptr = std::shared_ptr<NVMeSdBusPlusError>;
 
 /* Translates an error from libnvme */
-nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status,
-                             const char* method_name);
-nvme_ex_ptr makeLibNVMeError(int nvme_errno, int nvme_status,
-                             const char* method_name);
+nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status);
+nvme_ex_ptr makeLibNVMeError(int nvme_errno, int nvme_status);
 
 /* Creates an internal error */
 nvme_ex_ptr makeLibNVMeError(std::string_view msg);
@@ -48,7 +46,6 @@ nvme_ex_ptr makeLibNVMeError(std::string_view desc,
 
 /* Throws an appropriate error type for the given status from libnvme,
  * or returns normally if nvme_status == 0 */
-void checkLibNVMeError(const std::error_code& err, int nvme_status,
-                       const char* method_name);
+void checkLibNVMeError(const std::error_code& err, int nvme_status);
 
 std::ostream& operator<<(std::ostream& o, nvme_ex_ptr ex);

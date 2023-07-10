@@ -1102,7 +1102,7 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "Delete");
+    checkLibNVMeError(err, nvme_status);
 
     forgetVolume(volume);
 }

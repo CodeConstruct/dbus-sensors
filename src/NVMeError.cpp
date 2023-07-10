@@ -167,16 +167,12 @@ static void
     desc = s.str();
 }
 
-nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status,
-                             const char* method_name)
+nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status)
 {
-    // TODO: possibly remove method_name argument
-    (void)method_name;
-
     if (nvme_status < 0)
     {
         auto desc = std::string("libnvme error: ") + err.message();
-        std::cerr << method_name << ":" << desc << std::endl;
+        std::cerr << desc << std::endl;
         return std::make_shared<NVMeSdBusPlusError>(desc);
     }
     else if (nvme_status > 0)
@@ -199,18 +195,17 @@ nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status,
                           << std::endl;
                 desc = "Unknown libnvme error";
         }
-        std::cerr << method_name << ":" << desc << std::endl;
+        std::cerr << desc << std::endl;
         return std::make_shared<NVMeSdBusPlusError>(desc, specific);
     }
     // No Error
     return nullptr;
 }
 
-nvme_ex_ptr makeLibNVMeError(int nvme_errno, int nvme_status,
-                             const char* method_name)
+nvme_ex_ptr makeLibNVMeError(int nvme_errno, int nvme_status)
 {
     auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
-    return makeLibNVMeError(err, nvme_status, method_name);
+    return makeLibNVMeError(err, nvme_status);
 }
 
 nvme_ex_ptr makeLibNVMeError(std::string_view msg)
@@ -226,10 +221,9 @@ nvme_ex_ptr makeLibNVMeError(std::string_view desc,
 
 /* Throws an appropriate error type for the given status from libnvme,
  * or returns normally if nvme_status == 0 */
-void checkLibNVMeError(const std::error_code& err, int nvme_status,
-                       const char* method_name)
+void checkLibNVMeError(const std::error_code& err, int nvme_status)
 {
-    auto e = makeLibNVMeError(err, nvme_status, method_name);
+    auto e = makeLibNVMeError(err, nvme_status);
     if (e)
     {
         throw *e;

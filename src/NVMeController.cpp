@@ -53,7 +53,7 @@ void NVMeControllerEnabled::init()
         if (selfWeak.expired())
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
-                              -1, "AdminNonDataCmd");
+                              -1);
             return std::tuple<uint32_t, uint32_t, uint32_t>{0, 0, 0};
         }
         return selfWeak.lock()->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2,
@@ -72,7 +72,7 @@ void NVMeControllerEnabled::init()
         if (selfWeak.expired())
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
-                              -1, "SecuritySend");
+                              -1);
             return;
         }
         return selfWeak.lock()->securitySendMethod(yield, proto, proto_specific,
@@ -86,7 +86,7 @@ void NVMeControllerEnabled::init()
         if (selfWeak.expired())
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
-                              -1, "SecurityReceive");
+                              -1);
             return std::vector<uint8_t>{};
         }
         return selfWeak.lock()->securityReceiveMethod(
@@ -449,7 +449,7 @@ void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "SecuritySend");
+    checkLibNVMeError(err, nvme_status);
 }
 
 std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
@@ -475,7 +475,7 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "SecurityReceive");
+    checkLibNVMeError(err, nvme_status);
     return data;
 }
 
@@ -562,7 +562,7 @@ void NVMeControllerEnabled::attachVolume(
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "attachVolume");
+    checkLibNVMeError(err, nvme_status);
 
     if (auto s = subsys.lock())
     {
@@ -606,7 +606,7 @@ void NVMeControllerEnabled::detachVolume(
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "detachVolume");
+    checkLibNVMeError(err, nvme_status);
 
     if (auto s = subsys.lock())
     {

@@ -481,7 +481,7 @@ void NVMeMi::adminIdentify(
                           << std::endl;
             }
 
-            auto ex = makeLibNVMeError(errno, rc, "adminIdentify");
+            auto ex = makeLibNVMeError(errno, rc);
             if (ex)
             {
                 std::cerr << "fail to do nvme identify: " << ex->description()
@@ -1295,7 +1295,7 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
     struct nvme_id_ns id;
     printf("getblocksize\n");
     int status = nvme_mi_admin_identify_ns(ctrl, NVME_NSID_ALL, &id);
-    auto e = makeLibNVMeError(errno, status, "getBlockSize");
+    auto e = makeLibNVMeError(errno, status);
     if (e)
     {
         throw e;
@@ -1385,7 +1385,7 @@ void NVMeMi::createNamespace(
         int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_nsid);
         nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
 
-        nvme_ex_ptr e = makeLibNVMeError(errno, status, "createVolume");
+        nvme_ex_ptr e = makeLibNVMeError(errno, status);
 
         NVMeNSIdentify newns = {
             .namespaceId = new_nsid,
@@ -1422,7 +1422,7 @@ void NVMeMi::createNamespace(
     {
         std::cerr << "adminAttachDetachNamespace post failed: " << post_err
                   << std::endl;
-        auto e = makeLibNVMeError(post_err, -1, "createVolume");
+        auto e = makeLibNVMeError(post_err, -1);
         io.post(
             [submitted_cb{std::move(submitted_cb)}, e]() { submitted_cb(e); });
     }
@@ -1495,7 +1495,7 @@ void NVMeMi::adminListNamespaces(
             }
         }
 
-        auto ex = makeLibNVMeError(nvme_errno, status, "adminListNamespaces");
+        auto ex = makeLibNVMeError(nvme_errno, status);
         self->io.post([cb{std::move(cb)}, ex, ns]() { cb(ex, ns); });
     });
     if (post_err)
@@ -1570,7 +1570,7 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
         nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
         printf("san status %d errno %d\n", status, errno);
 
-        auto ex = makeLibNVMeError(errno, status, "adminSanitize");
+        auto ex = makeLibNVMeError(errno, status);
         self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
     });
     if (post_err)
