@@ -1399,21 +1399,6 @@ void NVMeMi::createNamespace(
         self->io.post([finished_cb{std::move(finished_cb)}, e, newns]() {
             finished_cb(e, newns);
         });
-
-#if 0
-        // TODO testing purposes
-        static uint32_t counter = 20;
-
-        printf("createNamespace top, sleeping 5 seconds\n");
-        sleep(5);
-
-        uint32_t new_ns = counter++;
-
-        printf("create complete. ns %d\n", new_ns);
-
-        auto err = std::make_error_code(static_cast<std::errc>(0));
-        cb(err, 0, new_ns);
-#endif
     });
 
     printf("submitted cb %d\n", (int)gettid());
