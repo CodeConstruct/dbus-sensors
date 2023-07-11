@@ -30,7 +30,6 @@ void NVMeProgress::complete()
 
 void NVMeProgress::fail()
 {
-    // TODO: perhaps errorName could be a general NVMeProgress property.
     status(OperationStatus::Failed);
 }
 

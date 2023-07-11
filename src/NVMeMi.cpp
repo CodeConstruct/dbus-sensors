@@ -1293,7 +1293,6 @@ void NVMeMi::adminNonDataCmd(
 size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
 {
     struct nvme_id_ns id;
-    printf("getblocksize\n");
     int status = nvme_mi_admin_identify_ns(ctrl, NVME_NSID_ALL, &id);
     auto e = makeLibNVMeError(errno, status);
     if (e)
@@ -1374,11 +1373,8 @@ void NVMeMi::createNamespace(
         data.ncap = ::htole64(blocks);
         data.flbas = flbas;
 
-        printf("verified %d\n", (int)gettid());
-
         // submission has been verified.
         submitted_cb(nvme_ex_ptr());
-        printf("after submitted_cb %d\n", (int)gettid());
 
         unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
         nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
@@ -1400,8 +1396,6 @@ void NVMeMi::createNamespace(
             finished_cb(e, newns);
         });
     });
-
-    printf("submitted cb %d\n", (int)gettid());
 
     if (post_err)
     {

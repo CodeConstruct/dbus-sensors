@@ -295,7 +295,6 @@ void NVMeSubsystem::markFunctional(bool toggle)
 
                 index++;
             }
-            // self->createStorageAssociation();
 
             /*
             find primary controller and make association
@@ -664,7 +663,7 @@ sdbusplus::message::object_path
         intf->createNamespace(
             ctrl, size, lbaFormat, metadataAtEnd,
 
-            // submitted_cb
+            // submitted_cb argument
             [h](nvme_ex_ptr ex) mutable {
             // #2
 
@@ -674,7 +673,7 @@ sdbusplus::message::object_path
             h(std::make_tuple(ex));
         },
 
-            // finished_cb
+            // finished_cb argument
             [weak, prog_id](nvme_ex_ptr ex, NVMeNSIdentify newns) mutable {
             // #5. This will only be called once #4 completes.
             // It will not be called if the submit failed.
