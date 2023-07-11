@@ -1062,15 +1062,12 @@ void NVMeSubsystem::querySupportedFormats()
             return;
         }
 
-        std::cerr << self->name << ": Got nlbaf " << nlbaf << "\n";
         std::vector<LBAFormat> formats;
         for (size_t i = 0; i < nlbaf; i++)
         {
             size_t blockSize = 1ul << id.lbaf[i].ds;
             size_t metadataSize = id.lbaf[i].ms;
             RelPerf rp = relativePerformanceFromRP(id.lbaf[i].rp);
-            std::cerr << self->name << ": lbaf " << i << " blocksize "
-                      << blockSize << "\n";
             formats.push_back({.index = i,
                                .blockSize = blockSize,
                                .metadataSize = metadataSize,
