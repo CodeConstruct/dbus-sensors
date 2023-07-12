@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 
 using sdbusplus::xyz::openbmc_project::Inventory::Item::server::
@@ -45,7 +46,8 @@ NVMeControllerEnabled::NVMeControllerEnabled(
     NVMeController(io, objServer, conn, path, nvmeIntf, ctrl),
     StorageController(dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str()),
     NVMeAdmin(*conn, path.c_str(),
-              {{"FirmwareCommitStatus", {FwCommitStatus::Ready}}})
+              {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
+              {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
 {}
 
 NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
@@ -54,7 +56,8 @@ NVMeControllerEnabled::NVMeControllerEnabled(NVMeController&& nvmeController) :
         dynamic_cast<sdbusplus::bus_t&>(*this->NVMeController::conn),
         this->NVMeController::path.c_str()),
     NVMeAdmin(*this->NVMeController::conn, this->NVMeController::path.c_str(),
-              {{"FirmwareCommitStatus", {FwCommitStatus::Ready}}})
+              {{"FirmwareCommitStatus", {FwCommitStatus::Ready}},
+              {"FirmwareDownloadStatus", {FwDownloadStatus::Ready}}})
 {}
 
 void NVMeControllerEnabled::init()
@@ -282,6 +285,48 @@ void NVMeControllerEnabled::firmwareCommitAsync(uint8_t commitAction,
 
         self->NVMeAdmin::firmwareCommitStatus(FwCommitStatus::Success);
         });
+}
+
+NVMeAdmin::FwDownloadStatus
+    NVMeControllerEnabled::firmwareDownloadStatus(NVMeAdmin::FwDownloadStatus status)
+{
+    auto downloadStatus = this->NVMeAdmin::firmwareDownloadStatus();
+    // The function is only allowed to reset the status back to ready
+    if (status != FwDownloadStatus::Ready ||
+        downloadStatus == FwDownloadStatus::Ready ||
+        downloadStatus == FwDownloadStatus::InProgress)
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed{};
+    }
+    return this->NVMeAdmin::firmwareDownloadStatus(status);
+}
+
+void NVMeControllerEnabled::firmwareDownloadAsync(std::string pathToImage)
+{
+    auto downloadStatus = this->NVMeAdmin::firmwareDownloadStatus();
+    if (downloadStatus != FwDownloadStatus::Ready)
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed();
+    }
+    if (std::filesystem::exists(pathToImage))
+    {
+        this->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::InProgress);
+        nvmeIntf->adminFwDownload(
+            nvmeCtrl, pathToImage,
+            [self{shared_from_this()}](const std::error_code& ec,
+                                       nvme_status_field status) {
+            if (ec || status != NVME_SC_SUCCESS)
+            {
+                self->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::Failed);
+                return;
+            }
+            self->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::Success);
+        });
+    }
+    else
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::InvalidArgument();
+    }
 }
 
 NVMeControllerEnabled::~NVMeControllerEnabled()

@@ -178,6 +178,20 @@ class NVMeControllerEnabled :
     void firmwareCommitAsync(uint8_t commitAction, uint8_t firmwareSlot,
                              bool bpid) override;
 
+    /** Set value of FirmwareDownloadStatus
+     * Used to reset the the status back to ready if the download is not in
+     * process.
+     */
+    NVMeAdmin::FwDownloadStatus
+        firmwareDownloadStatus(NVMeAdmin::FwDownloadStatus) override;
+
+    /** @brief Implementation for FirmwareDownloadAsync
+     *  Send Firmware Image to the NVMe device
+     *
+     *  @param[in] pathToImage - Path to the firmware image
+     */
+    void firmwareDownloadAsync(std::string pathToImage) override;
+
     void securitySendMethod(boost::asio::yield_context yield, uint8_t proto,
                             uint16_t proto_specific, std::span<uint8_t> data);
 

@@ -5,6 +5,7 @@
 #include <boost/endian.hpp>
 
 #include <cerrno>
+#include <fstream>
 #include <iostream>
 
 std::map<int, std::weak_ptr<NVMeMi::Worker>> NVMeMi::workerMap{};
@@ -13,7 +14,7 @@ std::map<int, std::weak_ptr<NVMeMi::Worker>> NVMeMi::workerMap{};
 nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
 constexpr size_t maxNVMeMILength = 4096;
-constexpr int tcgDefaultTimeoutMS = 20*1000;
+constexpr int tcgDefaultTimeoutMS = 20 * 1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
                std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
@@ -35,7 +36,6 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
 
     if (singleThreadMode)
     {
-
         auto root = deriveRootBus(bus);
 
         if (!root || *root < 0)
@@ -292,7 +292,6 @@ void NVMeMi::miSubsystemHealthStatusPoll(
                                                               true, &ss_health);
             if (rc < 0)
             {
-
                 std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
                           << ", eid: " << static_cast<int>(self->eid) << "]"
                           << "fail to subsystem_health_status_poll: "
@@ -360,7 +359,8 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
                           << "fail to scan controllers: "
                           << std::strerror(errno) << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
-                    cb(std::make_error_code(static_cast<std::errc>(last_errno)), {});
+                    cb(std::make_error_code(static_cast<std::errc>(last_errno)),
+                       {});
                 });
                 return;
             }
@@ -466,7 +466,8 @@ void NVMeMi::adminIdentify(
                           << "fail to do nvme identify: "
                           << std::strerror(errno) << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
-                    cb(std::make_error_code(static_cast<std::errc>(last_errno)), {});
+                    cb(std::make_error_code(static_cast<std::errc>(last_errno)),
+                       {});
                 });
                 return;
             }
@@ -553,10 +554,8 @@ void NVMeMi::getTelemetryLogChuck(
     std::vector<uint8_t>&& data,
     std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb)
 {
-
     if (offset >= data.size())
     {
-
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "get telemetry log: offset exceed the log size. "
@@ -615,9 +614,9 @@ void NVMeMi::getTelemetryLogChuck(
         {
             boost::asio::post(
                 self->io, [cb{std::move(cb)}, data{std::move(data)}]() mutable {
-                    std::span<uint8_t> span{data.data(), data.size()};
-                    cb({}, span);
-                });
+                std::span<uint8_t> span{data.data(), data.size()};
+                cb({}, span);
+            });
             return;
         }
 
@@ -662,8 +661,8 @@ void NVMeMi::adminGetLogPage(
                     // The number of entries for most recent error logs.
                     // Currently we only do one nvme mi transfer for the
                     // error log to avoid blocking other tasks
-                    static constexpr int num =
-                        nvme_mi_xfer_size / sizeof(nvme_error_log_page);
+                    static constexpr int num = nvme_mi_xfer_size /
+                                               sizeof(nvme_error_log_page);
                     nvme_error_log_page* log =
                         reinterpret_cast<nvme_error_log_page*>(data.data());
 
@@ -752,8 +751,8 @@ void NVMeMi::adminGetLogPage(
                     data.resize(sizeof(nvme_ns_list));
                     nvme_ns_list* log =
                         reinterpret_cast<nvme_ns_list*>(data.data());
-                    rc =
-                        nvme_mi_admin_get_log_changed_ns_list(ctrl, false, log);
+                    rc = nvme_mi_admin_get_log_changed_ns_list(ctrl, false,
+                                                               log);
                     if (rc)
                     {
                         std::cerr
@@ -769,8 +768,8 @@ void NVMeMi::adminGetLogPage(
                 // fall through to NVME_LOG_LID_TELEMETRY_CTRL
                 case NVME_LOG_LID_TELEMETRY_CTRL:
                 {
-                    bool host =
-                        (lid == NVME_LOG_LID_TELEMETRY_HOST) ? true : false;
+                    bool host = (lid == NVME_LOG_LID_TELEMETRY_HOST) ? true
+                                                                     : false;
 
                     uint32_t size = 0;
                     rc = getTelemetryLogSize(ctrl, host, size);
@@ -792,8 +791,8 @@ void NVMeMi::adminGetLogPage(
                         reinterpret_cast<nvme_resv_notification_log*>(
                             data.data());
 
-                    int rc =
-                        nvme_mi_admin_get_log_reservation(ctrl, false, log);
+                    int rc = nvme_mi_admin_get_log_reservation(ctrl, false,
+                                                               log);
                     if (rc)
                     {
                         std::cerr
@@ -841,7 +840,8 @@ void NVMeMi::adminGetLogPage(
                           << "fail to get log page: " << std::strerror(errno)
                           << std::endl;
                 logHandler = [cb{std::move(cb)}, last_errno{errno}]() {
-                    cb(std::make_error_code(static_cast<std::errc>(last_errno)), {});
+                    cb(std::make_error_code(static_cast<std::errc>(last_errno)),
+                       {});
                 };
             }
             else if (rc > 0)
@@ -858,14 +858,13 @@ void NVMeMi::adminGetLogPage(
 
             if (!logHandler)
             {
-                logHandler =
-                    [cb{std::move(cb)}, data{std::move(data)}]() mutable {
+                logHandler = [cb{std::move(cb)},
+                              data{std::move(data)}]() mutable {
                     std::span<uint8_t> span{data.data(), data.size()};
                     cb({}, span);
                 };
             }
             boost::asio::post(self->io, logHandler);
-
         });
     }
     catch (const std::runtime_error& e)
@@ -934,8 +933,8 @@ void NVMeMi::adminXfer(
                           << ", eid: " << static_cast<int>(self->eid) << "]"
                           << "failed to nvme_mi_admin_xfer" << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
-                    cb(std::make_error_code(static_cast<std::errc>(last_errno)), {},
-                       {});
+                    cb(std::make_error_code(static_cast<std::errc>(last_errno)),
+                       {}, {});
                 });
                 return;
             }
@@ -993,7 +992,6 @@ void NVMeMi::adminFwCommit(
             int rc = nvme_mi_admin_fw_commit(ctrl, &args);
             if (rc < 0)
             {
-
                 std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
                           << ", eid: " << static_cast<int>(self->eid) << "]"
                           << "fail to nvme_mi_admin_fw_commit: "
@@ -1044,14 +1042,129 @@ void NVMeMi::adminFwCommit(
     }
 }
 
+void NVMeMi::adminFwDownloadChunk(
+    nvme_mi_ctrl_t ctrl, std::string firmwarefile, size_t size, size_t offset,
+    int attempt_count,
+    std::function<void(const std::error_code&, nvme_status_field)>&& cb)
+{
+    if (!nvmeEP)
+    {
+        std::cerr << "nvme endpoint is invalid" << std::endl;
+        io.post([cb{std::move(cb)}]() {
+            cb(std::make_error_code(std::errc::no_such_device),
+               nvme_status_field::NVME_SC_MASK);
+        });
+        return;
+    }
+    try
+    {
+        post([ctrl, firmwarefile, size, offset, attempt_count,
+              cb{std::move(cb)}, self{shared_from_this()}]() mutable {
+            char data[nvme_mi_xfer_size];
+            std::ifstream fwFile(firmwarefile, std::ios::in | std::ios::binary);
+            if (fwFile.fail())
+            {
+                std::cerr << "fail to open fw image file: " << firmwarefile
+                          << strerror(errno) << std::endl;
+                self->io.post([cb{std::move(cb)}]() {
+                    cb(std::make_error_code(static_cast<std::errc>(errno)),
+                       nvme_status_field::NVME_SC_MASK);
+                });
+                return;
+            }
+            fwFile.seekg(offset, std::ios::beg);
+            nvme_fw_download_args args;
+            memset(&args, 0, sizeof(args));
+            args.args_size = sizeof(args);
+            int data_len = std::min(size - offset, nvme_mi_xfer_size);
+            fwFile.read(data, data_len);
+            fwFile.close();
+            args.offset = offset;
+            args.data_len = data_len;
+            args.data = data;
+
+            int rc = nvme_mi_admin_fw_download(ctrl, &args);
+            if (rc < 0)
+            {
+                if (attempt_count > 0)
+                {
+                    std::cout << "Retrying the firmware chunk. With Offset :"
+                              << offset << " Total firmware Size :" << size
+                              << std::endl;
+                    attempt_count = attempt_count - 1;
+                }
+                else
+                {
+                    std::cerr << "fail to nvme_mi_admin_fw_download: "
+                              << std::strerror(errno) << std::endl;
+                    self->io.post([cb{std::move(cb)}]() {
+                        cb(std::make_error_code(static_cast<std::errc>(errno)),
+                           nvme_status_field::NVME_SC_MASK);
+                    });
+                    return;
+                }
+            }
+            else
+            {
+                attempt_count = 3; /* Reset the attempt count*/
+                offset = offset + args.data_len;
+            }
+            if (offset >= size)
+            {
+                std::cout
+                    << "Successfully transferred the firmware. Transfer Size : "
+                    << offset << " Total Size :" << size << std::endl;
+                self->io.post([rc, cb{std::move(cb)}]() {
+                    cb({}, static_cast<nvme_status_field>(rc));
+                });
+                return;
+            }
+            self->adminFwDownloadChunk(ctrl, firmwarefile, size, offset,
+                                       attempt_count, std::move(cb));
+        });
+    }
+    catch (const std::runtime_error& e)
+    {
+        std::cerr << e.what() << std::endl;
+        io.post([cb{std::move(cb)}]() {
+            cb(std::make_error_code(std::errc::no_such_device),
+               nvme_status_field::NVME_SC_MASK);
+        });
+        return;
+    }
+}
+
+void NVMeMi::adminFwDownload(
+    nvme_mi_ctrl_t ctrl, std::string firmwarefile,
+    std::function<void(const std::error_code&, nvme_status_field)>&& cb)
+{
+    size_t offset = 0;
+    int tryCount = 3;
+    std::ifstream imageFile(firmwarefile,
+                            std::ios::in | std::ios::binary | std::ios::ate);
+    if (imageFile.fail())
+    {
+        std::cerr << "Can't open the firmware file: " << std::strerror(errno)
+                  << std::endl;
+        io.post([cb{std::move(cb)}]() {
+            cb(std::make_error_code(std::errc::no_such_device),
+               nvme_status_field::NVME_SC_MASK);
+        });
+    }
+    size_t size = imageFile.tellg();
+    imageFile.close();
+    adminFwDownloadChunk(ctrl, firmwarefile, size, offset, tryCount,
+                         std::move(cb));
+}
+
 void NVMeMi::adminSecuritySend(
     nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
     std::span<uint8_t> data,
     std::function<void(const std::error_code&, int nvme_status)>&& cb)
 {
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, proto, proto_specific, data,
-         cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, proto, proto_specific, data,
+                  cb{std::move(cb)}]() {
         struct nvme_security_send_args args;
         memset(&args, 0x0, sizeof(args));
         args.secp = proto;
@@ -1093,9 +1206,9 @@ void NVMeMi::adminSecurityReceive(
         return;
     }
 
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, proto, proto_specific, transfer_length,
-         cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, proto, proto_specific,
+                  transfer_length, cb{std::move(cb)}]() {
         std::vector<uint8_t> data(transfer_length);
 
         struct nvme_security_receive_args args;
