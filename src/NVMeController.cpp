@@ -71,9 +71,7 @@ void NVMeControllerEnabled::init()
                                      std::vector<uint8_t> data) {
         if (selfWeak.expired())
         {
-            checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
-                              -1);
-            return;
+	    NVMeError::makeInternalError("controller removed")->throw_specific();
         }
         return selfWeak.lock()->securitySendMethod(yield, proto, proto_specific,
                                                    data);
@@ -85,12 +83,9 @@ void NVMeControllerEnabled::init()
                                      uint32_t transfer_length) {
         if (selfWeak.expired())
         {
-            checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
-                              -1);
-            return std::vector<uint8_t>{};
+	    NVMeError::makeInternalError("controller removed")->throw_specific();
         }
-        return selfWeak.lock()->securityReceiveMethod(
-            yield, proto, proto_specific, transfer_length);
+        return selfWeak.lock()->securityReceiveMethod(yield, proto, proto_specific, transfer_length);
     });
 
     // StorageController interface is implemented manually to allow
@@ -105,6 +100,7 @@ void NVMeControllerEnabled::init()
         {
             return self->attachVolume(yield, volPath);
         }
+        // TODO handle !self case?
     });
     ctrlInterface->register_method(
         "DetachVolume",
@@ -114,6 +110,7 @@ void NVMeControllerEnabled::init()
         {
             return self->detachVolume(yield, volPath);
         }
+        // TODO handle !self case?
     });
 
     ctrlInterface->initialize();

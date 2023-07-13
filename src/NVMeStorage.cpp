@@ -41,7 +41,7 @@ void NVMeStorage::init(std::shared_ptr<NVMeStorage> self)
         {
             return self->createVolume(yield, size, lbaFormat, metadataAtEnd);
         }
-        throw *makeLibNVMeError("storage removed");
+        NVMeError::makeInternalError("storage removed")->throw_specific();
     });
 
     std::vector<std::tuple<size_t, size_t, size_t, RelPerf>> prop;

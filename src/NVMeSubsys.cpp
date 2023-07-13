@@ -695,7 +695,7 @@ sdbusplus::message::object_path
     // Exception must be thrown outside of the async block
     if (ex)
     {
-        throw *ex;
+        ex->throw_specific();
     }
 
     // Progress endpoint for clients to poll, if the submit was successful.
@@ -999,10 +999,10 @@ std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
 {
     if (volumes.contains(ns.namespaceId))
     {
-        std::string err_msg = std::string("Internal error, NSID exists " +
+        std::string err_msg = std::string("NSID exists " +
                                           std::to_string(ns.namespaceId));
         std::cerr << err_msg << "\n";
-        throw makeLibNVMeError(err_msg);
+        NVMeError::makeInternalError(err_msg)->throw_specific();
     }
 
     auto vol = NVMeVolume::create(objServer, conn, shared_from_this(), ns);
@@ -1131,7 +1131,7 @@ void NVMeSubsystem::sanitizeStatus(
         if (ec)
         {
             std::string msg = "GetLogPage failed: " + ec.message();
-            auto ex = makeLibNVMeError(msg);
+            auto ex = NVMeError::makeInternalError(msg);
             cb(ex, false, false, false, 0, 0, 0);
             return;
         }

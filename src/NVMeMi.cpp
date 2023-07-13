@@ -412,7 +412,7 @@ void NVMeMi::adminIdentify(
     {
         std::cerr << "nvme endpoint is invalid" << std::endl;
         io.post([cb{std::move(cb)}]() {
-            cb(makeLibNVMeError("nvme endpoint is invalid"), {});
+            cb(NVMeError::makeInternalError("nvme endpoint is invalid"), {});
         });
         return;
     }
@@ -481,11 +481,10 @@ void NVMeMi::adminIdentify(
                           << std::endl;
             }
 
-            auto ex = makeLibNVMeError(errno, rc);
+            auto ex = NVMeError::checkLibNVMe(errno, rc);
             if (ex)
             {
-                std::cerr << "fail to do nvme identify: " << ex->description()
-                          << std::endl;
+                std::cerr << "fail to do nvme identify\n";
             }
 
             self->io.post(
@@ -502,7 +501,7 @@ void NVMeMi::adminIdentify(
                   << std::endl;
         auto msg = std::string("Runtime error: ") + e.what();
         std::cerr << msg << std::endl;
-        io.post([cb{std::move(cb)}, msg]() { cb(makeLibNVMeError(msg), {}); });
+        io.post([cb{std::move(cb)}, msg]() { cb(NVMeError::makeInternalError(msg), {}); });
         return;
     }
 }
@@ -1294,7 +1293,7 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
 {
     struct nvme_id_ns id;
     int status = nvme_mi_admin_identify_ns(ctrl, NVME_NSID_ALL, &id);
-    auto e = makeLibNVMeError(errno, status);
+    auto e = NVMeError::checkLibNVMe(errno, status);
     if (e)
     {
         throw e;
@@ -1308,9 +1307,9 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format)
     // NLBAF is the maximum allowed index (not a count)
     if (lba_format > max_lbaf)
     {
-        throw makeLibNVMeError("LBA format out of range, maximum is " +
-                                   std::to_string(max_lbaf),
-                               std::make_shared<CommonErr::InvalidArgument>());
+        NVMeError::makeInvalidArgument(
+            "LBA format out of range, maximum is " + std::to_string(max_lbaf)
+            )-> throw_specific();
     }
 
     return 1 << id.lbaf[lba_format].ds;
@@ -1346,8 +1345,7 @@ void NVMeMi::createNamespace(
             auto msg =
                 std::string("Size must be a multiple of the block size ") +
                 std::to_string(block_size);
-            submitted_cb(makeLibNVMeError(
-                msg, std::make_shared<CommonErr::InvalidArgument>()));
+            submitted_cb(NVMeError::makeInvalidArgument(msg));
             return;
         }
 
@@ -1381,7 +1379,7 @@ void NVMeMi::createNamespace(
         int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_nsid);
         nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
 
-        nvme_ex_ptr e = makeLibNVMeError(errno, status);
+        nvme_ex_ptr e = NVMeError::checkLibNVMe(errno, status);
 
         NVMeNSIdentify newns = {
             .namespaceId = new_nsid,
@@ -1401,7 +1399,7 @@ void NVMeMi::createNamespace(
     {
         std::cerr << "adminAttachDetachNamespace post failed: " << post_err
                   << std::endl;
-        auto e = makeLibNVMeError(post_err, -1);
+        nvme_ex_ptr e = NVMeError::checkLibNVMe(post_err, -1);
         io.post(
             [submitted_cb{std::move(submitted_cb)}, e]() { submitted_cb(e); });
     }
@@ -1474,12 +1472,12 @@ void NVMeMi::adminListNamespaces(
             }
         }
 
-        auto ex = makeLibNVMeError(nvme_errno, status);
+        auto ex = NVMeError::checkLibNVMe(nvme_errno, status);
         self->io.post([cb{std::move(cb)}, ex, ns]() { cb(ex, ns); });
     });
     if (post_err)
     {
-        auto ex = makeLibNVMeError("post failed");
+        auto ex = NVMeError::makeInternalError("post failed");
         io.post([cb{std::move(cb)}, ex]() { cb(ex, std::vector<uint32_t>()); });
     }
 }
@@ -1549,12 +1547,12 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
         nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
         printf("san status %d errno %d\n", status, errno);
 
-        auto ex = makeLibNVMeError(errno, status);
+	auto ex = NVMeError::checkLibNVMe(errno, status);
         self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
     });
     if (post_err)
     {
-        auto ex = makeLibNVMeError("post failed");
+        auto ex = NVMeError::makeInternalError("post failed");
         io.post([cb{std::move(cb)}, ex]() { cb(ex); });
     }
 }

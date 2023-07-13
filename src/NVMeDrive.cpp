@@ -47,9 +47,8 @@ void NVMeDrive::erase(EraseAction action)
         }
         else
         {
-            throw *makeLibNVMeError(
-                "sanitize already in progress with different parameters",
-                std::make_shared<CommonErr::Unavailable>());
+            std::cerr << "sanitize already in progress with different parameters\n";
+            throw CommonErr::Unavailable();
         }
     }
     else
