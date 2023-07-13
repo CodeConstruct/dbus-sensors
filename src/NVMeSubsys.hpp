@@ -119,7 +119,7 @@ class NVMeSubsystem :
         createProgress;
 
     // controller to use for NVMe operations. Is a member of the controllers
-    // map.
+    // map. Access this through getPrimaryController() to test for nullness.
     std::shared_ptr<NVMeControllerEnabled> primaryController;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
@@ -135,6 +135,9 @@ class NVMeSubsystem :
     void markAvailable(bool toggle);
 
     void fallbackNoSecondary();
+
+    // may throw NVMeError if no controller is available
+    std::shared_ptr<NVMeControllerEnabled> getPrimaryController() const;
 
     sdbusplus::message::object_path
         createVolume(boost::asio::yield_context yield, uint64_t size,
