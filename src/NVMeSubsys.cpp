@@ -365,6 +365,19 @@ void NVMeSubsystem::markAvailable(bool toggle)
     // TODO: make the Available interface false
     UnavailableCount = UnavailableMaxCount;
 }
+
+std::shared_ptr<NVMeControllerEnabled>
+    NVMeSubsystem::getPrimaryController() const
+{
+    if (!primaryController)
+    {
+        std::cerr << "dbus call for inactive NVMe subsystem " << name
+                  << ". Returning Unavailable\n";
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+    return primaryController;
+}
+
 void NVMeSubsystem::start()
 {
     for (auto [_, lib] : pluginLibMap)
@@ -616,7 +629,7 @@ sdbusplus::message::object_path
     // #0 (sequence of runtime/callbacks)
     auto prog_id = getRandomId();
 
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     using submit_callback_t = void(std::tuple<nvme_ex_ptr>);
@@ -726,7 +739,7 @@ std::string NVMeSubsystem::volumePath(uint32_t nsid) const
 
 void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS,
                         nsid, NVME_CNTLID_NONE,
@@ -788,7 +801,7 @@ void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
 
 void NVMeSubsystem::updateVolumes()
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminListNamespaces(
         ctrl, [ctrl, intf, self{shared_from_this()}](
@@ -829,7 +842,7 @@ void NVMeSubsystem::updateVolumes()
 
 void NVMeSubsystem::fillDrive()
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL,
                         NVME_NSID_NONE, NVME_CNTLID_NONE,
@@ -852,10 +865,10 @@ void NVMeSubsystem::fillDrive()
             // https://gerrit.openbmc.org/c/openbmc/phosphor-dbus-interfaces/+/43458/2/xyz/openbmc_project/Software/Version.interface.yaml#47
             // TODO find/write a better reference
             std::string v("xyz.openbmc_project.NVMe.ControllerFirmwareVersion");
-            self->primaryController->version(v);
-            self->primaryController->purpose(
-                SoftwareVersion::VersionPurpose::Other);
-            self->primaryController->extendedVersion(v + ":" + fwVer);
+            auto pc = self->getPrimaryController();
+            pc->version(v);
+            pc->purpose(SoftwareVersion::VersionPurpose::Other);
+            pc->extendedVersion(v + ":" + fwVer);
         }
     });
 }
@@ -1006,7 +1019,7 @@ void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
 
 void NVMeSubsystem::querySupportedFormats()
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(
         ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS, NVME_NSID_ALL,
@@ -1050,7 +1063,7 @@ void NVMeSubsystem::querySupportedFormats()
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
                                  std::shared_ptr<NVMeVolume> volume)
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     using callback_t = void(std::tuple<std::error_code, int>);
@@ -1078,7 +1091,7 @@ void NVMeSubsystem::startSanitize(
     const NVMeSanitizeParams& params,
     std::function<void(nvme_ex_ptr ex)>&& submitCb)
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     intf->adminSanitize(ctrl, params.nvmeAction(), params.passes,
@@ -1091,7 +1104,7 @@ void NVMeSubsystem::sanitizeStatus(
                        bool completed, uint16_t sstat, uint16_t sprog,
                        uint32_t scdw10)>&& cb)
 {
-    nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
+    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     intf->adminGetLogPage(
