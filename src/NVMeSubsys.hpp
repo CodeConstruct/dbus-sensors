@@ -81,4 +81,7 @@ class NVMeSubsystem : public std::enable_shared_from_this<NVMeSubsystem>
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned UnavailableCount = 0;
     static constexpr unsigned UnavailableMaxCount = 60;
+
+    // process Secondary controller and start controllers and the associated Plugin
+    void processSecondaryControllerList(nvme_secondary_ctrl_list* secCntlrList);
 };
