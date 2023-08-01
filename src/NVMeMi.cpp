@@ -538,8 +538,12 @@ int getTelemetryLogSize(nvme_mi_ctrl_t ctrl, bool host, uint32_t& size)
         return rc;
     }
 
+    // Restrict the telemetry log to Data Area 1 and 2. Getting Data Area 3
+    // OOB is not suitable due to its possible size. Data Area 3 can be up to
+    // 30000 data blocks with each block being 512 bytes in size. Restricting
+    // to Area 1 and 2.
     size = static_cast<uint32_t>(
-               (boost::endian::little_to_native(log.dalb3) + 1)) *
+               (boost::endian::little_to_native(log.dalb2) + 1)) *
            NVME_LOG_TELEM_BLOCK_SIZE;
     return rc;
 }
