@@ -93,11 +93,18 @@ inline std::optional<std::string>
         {
             break;
         }
-        names.insert(names.begin(), *name);
+
+        if (!names.empty() && names.back().starts_with(*name))
+        {
+            // Skip potential duplicate prefix
+            continue;
+        }
+        names.push_back(*name);
     } while (rbegin != path.rend());
 
-    std::string name = boost::algorithm::join(names, "_");
-    return name;
+    std::reverse(names.begin(), names.end());
+    auto sensorName = boost::algorithm::join(names, "_");
+    return sensorName;
 }
 
 // Function to update NVMe temp sensor
