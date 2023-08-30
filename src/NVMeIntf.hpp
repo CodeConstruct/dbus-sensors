@@ -198,7 +198,13 @@ class NVMeMiIntf
         uint32_t transfer_length,
         std::function<void(const std::error_code&, int nvme_status,
                            const std::span<uint8_t> data)>&& cb) = 0;
-
+    
+    virtual void adminNonDataCmd(
+        nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
+        uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
+        uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
+        std::function<void(const std::error_code&, int nvme_status,
+                           uint32_t comption_dw0)>&& cb) = 0;
     /**
      * adminXfer() -  Raw admin transfer interface.
      * @ctrl: controller to send the admin command to

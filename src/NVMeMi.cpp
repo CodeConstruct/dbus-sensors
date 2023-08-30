@@ -1255,3 +1255,33 @@ void NVMeMi::adminSecurityReceive(
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, {}); });
     }
 }
+
+void NVMeMi::adminNonDataCmd(
+    nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
+    uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
+    uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
+    std::function<void(const std::error_code&, int nvme_status,
+                       uint32_t comption_dw0)>&& cb)
+{
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, opcode, cdw1, cdw2, cdw3,
+             cdw10, cdw11, cdw12, cdw13, cdw14, cdw15, cb{std::move(cb)}]() {
+        uint32_t comption_dw0 = 0;
+        int nvme_status = nvme_mi_admin_admin_passthru(
+            ctrl, opcode, 0, 0, cdw1, cdw2, cdw3, cdw10, cdw11, cdw12, cdw13,
+            cdw14, cdw15, 0, nullptr, 0, nullptr, 10*1000, &comption_dw0);
+        self->io.post(
+            [cb{std::move(cb)}, nvme_errno{errno}, nvme_status, comption_dw0]() mutable {
+            auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
+            cb(err, nvme_status, comption_dw0);
+        });
+    });
+    if (post_err)
+    {
+        std::cerr << "[bus: " << bus << ", addr: " << addr
+                  << ", eid: " << static_cast<int>(eid) << "]"
+                  << "adminNonDataCmd post failed: " << post_err
+                  << std::endl;
+        io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, 0); });
+    }
+}

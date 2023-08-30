@@ -81,6 +81,26 @@ void NVMeControllerEnabled::init()
     assocIntf->register_property("Associations", associations);
     assocIntf->initialize();
 
+    passthruInterface =
+        objServer.add_interface(path, "xyz.openbmc_project.NVMe.Passthru");
+
+    passthruInterface->register_method(
+        "AdminNonDataCmd",
+        [selfWeak{weak_from_this()}](
+            boost::asio::yield_context yield, uint8_t opcode, uint32_t cdw1,
+            uint32_t cdw2, uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
+            uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15) {
+        if (selfWeak.expired())
+        {
+            checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
+                              -1, "AdminNonDataCmd");
+            return std::tuple<uint32_t, uint32_t, uint32_t>{0, 0, 0};
+        }
+        return selfWeak.lock()->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2,
+                                                      cdw3, cdw10, cdw11, cdw12,
+                                                      cdw13, cdw14, cdw15);
+    });
+    passthruInterface->initialize();
 
     securityInterface = objServer.add_interface(
         path, "xyz.openbmc_project.Inventory.Item.StorageControllerSecurity");
@@ -332,6 +352,7 @@ void NVMeControllerEnabled::firmwareDownloadAsync(std::string pathToImage)
 NVMeControllerEnabled::~NVMeControllerEnabled()
 {
     objServer.remove_interface(securityInterface);
+    objServer.remove_interface(passthruInterface);
     NVMeAdmin::emit_removed();
     StorageController::emit_removed();
 }
@@ -457,6 +478,54 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "SecurityReceive");
     return data;
+}
+
+std::tuple<uint32_t, uint32_t, uint32_t>
+    NVMeControllerEnabled::adminNonDataCmdMethod(
+        boost::asio::yield_context yield, uint8_t opcode, uint32_t cdw1,
+        uint32_t cdw2, uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
+        uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15)
+{
+    using callback_t = void(std::tuple<std::error_code, int, uint32_t>);
+    auto [err, nvme_status, completion_dw0] =
+        boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
+            [intf{nvmeIntf}, ctrl{nvmeCtrl}, opcode, cdw1, cdw2, cdw3, cdw10,
+             cdw11, cdw12, cdw13, cdw14, cdw15](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+
+        intf->adminNonDataCmd(ctrl, opcode, cdw1, cdw2, cdw3, cdw10, cdw11,
+                              cdw12, cdw13, cdw14, cdw15,
+                              [h](const std::error_code& err, int nvme_status,
+                                  uint32_t completion_dw0) mutable {
+            h(std::make_tuple(err, nvme_status, completion_dw0));
+        });
+    },
+            yield);
+
+    std::cerr << "nvme_status:" << nvme_status << ", dw0:" << completion_dw0
+              << std::endl;
+    if (nvme_status < 0)
+    {
+        throw sdbusplus::exception::SdBusError(err.value(),
+                                               "adminNonDataCmdMethod");
+    }
+
+    // Parse MI status Or MI status from nvme_status
+    uint32_t mi_status = 0;
+    uint32_t admin_status = 0;
+    if (nvme_status_get_type(nvme_status) == NVME_STATUS_TYPE_MI)
+    {
+        // there is no Admin status and dw0 if MI layer failed.
+        mi_status = nvme_status_get_value(nvme_status);
+        admin_status = 0;
+        completion_dw0 = 0;
+    }
+    else
+    {
+        mi_status = 0;
+        admin_status = nvme_status_get_value(nvme_status);
+    }
+    return {mi_status, admin_status, completion_dw0};
 }
 
 class NVMeSdBusPlusError : public sdbusplus::exception::exception

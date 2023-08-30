@@ -75,6 +75,7 @@ class NVMeController
     std::string path;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> securityInterface;
+    std::shared_ptr<sdbusplus::asio::dbus_interface> passthruInterface;
 
     std::shared_ptr<NVMeMiIntf> nvmeIntf;
     nvme_mi_ctrl_t nvmeCtrl;
@@ -200,4 +201,9 @@ class NVMeControllerEnabled :
                                                uint16_t proto_specific,
                                                uint32_t transfer_length);
 
+    std::tuple<uint32_t, uint32_t, uint32_t>
+        adminNonDataCmdMethod(boost::asio::yield_context yield, uint8_t opcode,
+                              uint32_t cdw1, uint32_t cdw2, uint32_t cdw3,
+                              uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
+                              uint32_t cdw13, uint32_t cdw14, uint32_t cdw15);
 };
