@@ -17,7 +17,7 @@ using DriveErase =
 using EraseAction = sdbusplus::xyz::openbmc_project::Inventory::Item::server::
     DriveErase::EraseAction;
 using Asset =
-    sdbusplus::server::xyz::openbmc_project::inventory::decorator::Asset;
+    sdbusplus::xyz::openbmc_project::Inventory::Decorator::server::Asset;
 
 class NVMeSubsystem;
 

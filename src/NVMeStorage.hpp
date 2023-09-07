@@ -13,7 +13,7 @@
 using StorageBase =
     sdbusplus::xyz::openbmc_project::Inventory::Item::server::Storage;
 using RelPerf =
-    sdbusplus::common::xyz::openbmc_project::nvme::Storage::RelativePerformance;
+    sdbusplus::xyz::openbmc_project::Nvme::server::Storage::RelativePerformance;
 
 struct LBAFormat
 {

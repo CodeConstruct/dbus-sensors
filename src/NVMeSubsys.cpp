@@ -1056,7 +1056,8 @@ void NVMeSubsystem::querySupportedFormats()
 
         nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
 
-        size_t nlbaf = id.nlbaf;
+        // nlbaf is 0’s based
+        size_t nlbaf = id.nlbaf + 1;
         if (nlbaf > 64)
         {
             std::cerr << self->name << ": Bad nlbaf " << nlbaf << "\n";

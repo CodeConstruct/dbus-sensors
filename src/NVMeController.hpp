@@ -15,9 +15,9 @@
 #include <utility>
 
 using SoftwareVersion =
-    sdbusplus::server::xyz::openbmc_project::software::Version;
+    sdbusplus::xyz::openbmc_project::Software::server::Version;
 using SoftwareExtVersion =
-    sdbusplus::server::xyz::openbmc_project::software::ExtendedVersion;
+    sdbusplus::xyz::openbmc_project::Software::server::ExtendedVersion;
 
 class NVMeControllerPlugin;
 class NVMeSubsystem;
