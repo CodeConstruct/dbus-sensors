@@ -176,6 +176,7 @@ nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status,
     if (nvme_status < 0)
     {
         auto desc = std::string("libnvme error: ") + err.message();
+        std::cerr << method_name << ":" << desc << std::endl;
         return std::make_shared<NVMeSdBusPlusError>(desc);
     }
     else if (nvme_status > 0)
@@ -198,6 +199,7 @@ nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvme_status,
                           << std::endl;
                 desc = "Unknown libnvme error";
         }
+        std::cerr << method_name << ":" << desc << std::endl;
         return std::make_shared<NVMeSdBusPlusError>(desc, specific);
     }
     // No Error
