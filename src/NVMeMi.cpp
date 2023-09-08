@@ -18,6 +18,8 @@ nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
 constexpr size_t maxNVMeMILength = 4096;
 constexpr int tcgDefaultTimeoutMS = 20 * 1000;
+constexpr int namespaceDefaultTimeoutMS = 20*1000;
+constexpr int sanitizeDefaultTimeoutMS = 20*1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
                std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
@@ -1379,7 +1381,11 @@ void NVMeMi::createNamespace(
         submitted_cb(nvme_ex_ptr());
         printf("after submitted_cb %d\n", (int)gettid());
 
+        unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+        nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
         int status = nvme_mi_admin_ns_mgmt_create(ctrl, &data, 0, &new_nsid);
+        nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
+
         nvme_ex_ptr e = makeLibNVMeError(errno, status, "createVolume");
 
         NVMeNSIdentify newns = {
@@ -1430,7 +1436,11 @@ void NVMeMi::adminDeleteNamespace(
 {
     std::error_code post_err = try_post(
         [self{shared_from_this()}, ctrl, nsid, cb{std::move(cb)}]() {
+
+        unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+        nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
         int status = nvme_mi_admin_ns_mgmt_delete(ctrl, nsid);
+        nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
 
         self->io.post([cb{std::move(cb)}, nvme_errno{errno}, status]() {
             auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
@@ -1524,7 +1534,10 @@ void NVMeMi::adminAttachDetachNamespace(
         }
         args.args_size = sizeof(args);
 
+        unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+        nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
         int status = nvme_mi_admin_ns_attach(ctrl, &args);
+        nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
         self->io.post([cb{std::move(cb)}, nvme_errno{errno}, status]() {
             auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
             cb(err, status);
@@ -1553,7 +1566,10 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
             args.owpass = passes;
             args.oipbp = invert_pattern;
 
+            unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+            nvme_mi_ep_set_timeout(self->nvmeEP, sanitizeDefaultTimeoutMS);
             int status = nvme_mi_admin_sanitize_nvm(ctrl, &args);
+            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
             printf("san status %d errno %d\n", status, errno);
 
             auto ex = makeLibNVMeError(errno, status, "adminSanitize");
