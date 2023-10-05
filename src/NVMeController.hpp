@@ -45,13 +45,19 @@ class NVMeController
 
     virtual void start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin);
 
-    // setup association to the secondary controllers. Clear the Association if
-    // empty.
-    void setSecAssoc(
-        const std::vector<std::shared_ptr<NVMeController>> secCntrls);
-
-    inline void setSecAssoc()
+    // set the target as a primary controller with secondary controller list
+    // with it
+    inline void setPrimary(
+        const std::vector<std::shared_ptr<NVMeController>>& secCntrls)
     {
+        isPrimary = true;
+        setSecAssoc(secCntrls);
+    }
+
+    // set the target as a secondary controller
+    inline void setSecondary()
+    {
+        isPrimary = false;
         setSecAssoc({});
     }
 
@@ -86,6 +92,7 @@ class NVMeController
   protected:
     friend class NVMeControllerPlugin;
 
+    bool isPrimary;
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;
     std::shared_ptr<sdbusplus::asio::connection> conn;
@@ -110,6 +117,10 @@ class NVMeController
 
     // NVMe Plug-in for vendor defined command/field
     std::weak_ptr<NVMeControllerPlugin> plugin;
+
+  private:
+    void setSecAssoc(
+        const std::vector<std::shared_ptr<NVMeController>>& secCntrls);
 };
 
 /**

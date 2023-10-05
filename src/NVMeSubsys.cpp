@@ -166,13 +166,19 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
             secondaryController = NVMeControllerEnabled::create(
                 std::move(*secondaryController.get()));
         }
+        secondaryController->setSecondary();
         secCntrls.push_back(secondaryController);
     }
-    primaryController->setSecAssoc(secCntrls);
+    primaryController->setPrimary(secCntrls);
 
     // start controller
     for (auto& [_, pair] : controllers)
     {
+        // create controller plugin
+        if (plugin)
+        {
+            pair.second = plugin->createControllerPlugin(*pair.first, config);
+        }
         pair.first->start(pair.second);
     }
     // start plugin
@@ -274,17 +280,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                         self->io, self->objServer, self->conn, path.string(),
                         nvme, c, self->weak_from_this());
 
-                    // insert the controllers with empty plugin
-                    auto [iter, _] = self->controllers.insert(
-                        {*index, {nvmeController, {}}});
-
-                    // create controller plugin
-                    if (self->plugin)
-                    {
-                        auto& ctrlPlugin = iter->second.second;
-                        ctrlPlugin = self->plugin->createControllerPlugin(
-                            *nvmeController, self->config);
-                    }
+                    self->controllers.insert({*index, {nvmeController, {}}});
                 }
                 catch (const std::exception& e)
                 {
@@ -308,11 +304,6 @@ void NVMeSubsystem::markFunctional(bool toggle)
             */
             if (ctrlList.size() == 1)
             {
-                // Remove all associations
-                for (const auto& [_, pair] : self->controllers)
-                {
-                    pair.first->setSecAssoc();
-                }
                 self->processSecondaryControllerList(nullptr);
                 return;
             }
@@ -348,12 +339,6 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 }
                 nvme_secondary_ctrl_list* listHdr =
                     reinterpret_cast<nvme_secondary_ctrl_list*>(data.data());
-
-                // Remove all associations
-                for (const auto& [_, pair] : self->controllers)
-                {
-                    pair.first->setSecAssoc();
-                }
 
                 if (listHdr->num == 0)
                 {

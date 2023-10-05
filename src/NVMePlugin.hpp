@@ -44,6 +44,11 @@ class NVMeControllerPlugin
         return nvmeController->io;
     }
 
+    bool isPrimary() const
+    {
+        return nvmeController->isPrimary;
+    }
+
     /**
      * adminXfer() -  transfer Raw admin cmd to the binded conntroller
      * @admin_req: request header
@@ -115,8 +120,11 @@ class NVMePlugin
         if (res == subsystem->controllers.end() ||
             &controller != res->second.first.get())
         {
-            throw std::runtime_error("Failed to create controller plugin: "
-                                     "cannot find the controller");
+            std::cerr << ("Failed to create controller plugin: "
+                          "cannot find the controller")
+                      << std::endl;
+            res->second.second.reset();
+            return {};
         }
 
         // insert the plugin

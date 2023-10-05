@@ -395,8 +395,8 @@ NVMeController::NVMeController(
     std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
     std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl,
     std::weak_ptr<NVMeSubsystem> subsys) :
-    io(io),
-    objServer(objServer), conn(conn), path(path), nvmeIntf(nvmeIntf),
+    isPrimary(true),
+    io(io), objServer(objServer), conn(conn), path(path), nvmeIntf(nvmeIntf),
     nvmeCtrl(ctrl), subsys(subsys)
 {}
 
@@ -411,7 +411,7 @@ void NVMeController::start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin)
 }
 
 void NVMeController::setSecAssoc(
-    const std::vector<std::shared_ptr<NVMeController>> secCntrls)
+    const std::vector<std::shared_ptr<NVMeController>>& secCntrls)
 {
     secondaryControllers.clear();
 
