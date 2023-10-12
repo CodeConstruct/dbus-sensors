@@ -80,6 +80,7 @@ class NVMeSubsystem :
     {
         Stop,
         Intiatilzing,
+        Aborting,
         Start,
     };
 
