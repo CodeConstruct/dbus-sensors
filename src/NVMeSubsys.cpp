@@ -136,7 +136,7 @@ void NVMeSubsystem::processSecondaryControllerList(
             std::cerr << "fail to match primary controller from "
                          "identify sencondary cntrl list"
                       << std::endl;
-            status = Status::Stop;
+            status = Status::Aborting;
             markFunctional(false);
             markAvailable(false);
             return;
@@ -232,10 +232,35 @@ void NVMeSubsystem::markFunctional(bool toggle)
         // plugin.reset();
         return;
     }
+
     if (status == Status::Intiatilzing)
     {
         throw std::runtime_error("cannot start: the subsystem is intiatilzing");
     }
+
+    if (status == Status::Aborting)
+    {
+        throw std::runtime_error(
+            "cannot start: subsystem initialisation has aborted and must transition to stopped");
+    }
+
+    if (status == Status::Start)
+    {
+        // Prevent consecutive calls to NVMeMiIntf::miScanCtrl()
+        //
+        // NVMeMiIntf::miScanCtrl() calls nvme_mi_scan_ep(..., true), which
+        // forces a rescan and invalidates any nvme_mi_ctrl objects created on a
+        // previous scan.
+        //
+        // We require a transition through Status::Stop (via
+        // `markFunctional(false)`) so that the lifetime of the NVMeController
+        // instances in this->controllers do not exceed the lifetime of their
+        // associated nvme_mi_ctrl object.
+        return;
+    }
+
+    assert(status == Status::Stop);
+
     status = Status::Intiatilzing;
     markAvailable(toggle);
 
@@ -253,7 +278,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 // TODO: mark the subsystem invalid and reschedule refresh
                 std::cerr << "fail to scan controllers for the nvme subsystem"
                           << (ec ? ": " + ec.message() : "") << std::endl;
-                self->status = Status::Stop;
+                self->status = Status::Aborting;
                 self->markFunctional(false);
                 self->markAvailable(false);
                 return;
@@ -321,7 +346,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 {
                     std::cerr << "fail to identify secondary controller list"
                               << std::endl;
-                    self->status = Status::Stop;
+                    self->status = Status::Aborting;
                     self->markFunctional(false);
                     self->markAvailable(false);
                     return;
@@ -333,7 +358,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 {
                     std::cerr << "empty identify secondary controller list"
                               << std::endl;
-                    self->status = Status::Stop;
+                    self->status = Status::Aborting;
                     self->markFunctional(false);
                     self->markAvailable(false);
                     return;
@@ -571,11 +596,7 @@ void NVMeSubsystem::start()
                 return;
             }
 
-            // restart the subsystem
-            if (self->status == Status::Stop)
-            {
-                self->markFunctional(true);
-            }
+            self->markFunctional(true);
 
             // TODO: update the drive interface
 
