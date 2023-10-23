@@ -48,7 +48,7 @@ class NVMeDrive :
     public std::enable_shared_from_this<NVMeDrive>
 {
   public:
-    static const int sanitizePollIntervalSecs = 4;
+    static constexpr const int sanitizePollIntervalSecs = 4;
 
     NVMeDrive(boost::asio::io_context& io,
               std::shared_ptr<sdbusplus::asio::connection> conn,
