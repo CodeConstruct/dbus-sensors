@@ -1,0 +1,159 @@
+From 4ca5dd70e54b0752fbf9282eaec08174e4825000 Mon Sep 17 00:00:00 2001
+From: Matt Johnston <matt@codeconstruct.com.au>
+Date: Thu, 18 May 2023 13:51:51 +0800
+Subject: [PATCH 5/5] Add DriveErase interface
+
+This provides an Erase method on a drive.
+
+Signed-off-by: Matt Johnston <matt@codeconstruct.com.au>
+Change-Id: I0458824bed197dacb525e18afa4d2736808e873f
+
+Patch Tracking Bug: b/303071698
+Upstream info / review: https://github.com/CodeConstruct/phosphor-dbus-interfaces/commits/dev/nvme-redfish
+Upstream-Status: Pending
+Justification: CodeConstruct will upstream these patches. After
+               that, we can bump and remove these patches.
+---
+ .../Inventory/Item/DriveErase/meson.build     | 15 +++++
+ .../Inventory/Item/meson.build                | 15 +++++
+ .../openbmc_project/Nvme/Drive/meson.build    | 15 +++++
+ .../Inventory/Item/DriveErase.interface.yaml  | 57 +++++++++++++++++++
+ 4 files changed, 102 insertions(+)
+ create mode 100644 gen/xyz/openbmc_project/Inventory/Item/DriveErase/meson.build
+ create mode 100644 gen/xyz/openbmc_project/Nvme/Drive/meson.build
+ create mode 100644 yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml
+
+diff --git a/gen/xyz/openbmc_project/Inventory/Item/DriveErase/meson.build b/gen/xyz/openbmc_project/Inventory/Item/DriveErase/meson.build
+new file mode 100644
+index 0000000..c7daf5e
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Inventory/Item/DriveErase/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Inventory/Item/DriveErase__cpp'.underscorify(),
++    input: [ '../../../../../../yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../../yaml',
++        'xyz/openbmc_project/Inventory/Item/DriveErase',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Inventory/Item/meson.build b/gen/xyz/openbmc_project/Inventory/Item/meson.build
+index 38a0f33..0d0065d 100644
+--- a/gen/xyz/openbmc_project/Inventory/Item/meson.build
++++ b/gen/xyz/openbmc_project/Inventory/Item/meson.build
+@@ -193,6 +193,21 @@ generated_others += custom_target(
+     ],
+ )
+ 
++subdir('DriveErase')
++generated_others += custom_target(
++    'xyz/openbmc_project/Inventory/Item/DriveErase__markdown'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml',  ],
++    output: [ 'DriveErase.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Inventory/Item/DriveErase',
++    ],
++)
++
+ subdir('Ethernet')
+ generated_others += custom_target(
+     'xyz/openbmc_project/Inventory/Item/Ethernet__markdown'.underscorify(),
+diff --git a/gen/xyz/openbmc_project/Nvme/Drive/meson.build b/gen/xyz/openbmc_project/Nvme/Drive/meson.build
+new file mode 100644
+index 0000000..478fc18
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/Drive/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/Drive__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/Drive.interface.yaml',  ],
++    output: [ 'error.cpp', 'error.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/Drive',
++    ],
++)
++
+diff --git a/yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml b/yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml
+new file mode 100644
+index 0000000..7851af2
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Inventory/Item/DriveErase.interface.yaml
+@@ -0,0 +1,57 @@
++description: >
++    NVMe-specific drive state management
++methods:
++    - name: Erase
++      description: >
++          Erases all storage user data. This is performed asynchronously,
++          callers can wait for the EraseInProgress property. An error may be
++          returned immediately, or after the erase completes.
++
++      parameters:
++          - name: Action
++            type: enum[self.EraseAction]
++      errors:
++          - xyz.openbmc_project.Common.Error.NotAllowed
++          - xyz.openbmc_project.Common.Error.UnsupportedRequest
++          - xyz.openbmc_project.Common.Error.Unavailable
++          - xyz.openbmc_project.Common.Error.DeviceOperationFailed
++
++properties:
++    - name: EraseInProgress
++      type: boolean
++      description: >
++          Indicates that an Erase operation is in progress.
++
++    - name: ErrorName
++      type: string
++      description: >
++          Indicates that the last Erase method call failed, corresponds to an
++          error enum.
++
++    - name: ErrorDescription
++      type: string
++      description: >
++          Indicates that the last Erase method call failed, is a text
++          description.
++
++    - name: ErasePercentage
++      type: double
++      description: >
++          Indicates the percentage completed of a Sanitize, in the range 0.0 to
++          100.0 Only valid when SanitizeInProgress = true, will be set to 0.0
++          otherwise.
++
++enumerations:
++    - name: EraseAction
++      description: >
++          The action to perform
++      values:
++          - name: BlockErase
++            description: >
++                Low-level block erase
++          - name: CryptoErase
++            description: >
++                Erase by changing encryption keys
++          - name: Overwrite
++            description: >
++                Erase by writing over media
+-- 
+2.42.0.582.g8ccd20d70d-goog
+

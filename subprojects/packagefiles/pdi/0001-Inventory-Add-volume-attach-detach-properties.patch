@@ -1,0 +1,117 @@
+From 99114782a77ce09d1133b0693a0dbb673e06c8f7 Mon Sep 17 00:00:00 2001
+From: Matt Johnston <matt@codeconstruct.com.au>
+Date: Wed, 25 Jan 2023 16:38:42 +0800
+Subject: [PATCH 1/5] Inventory: Add volume attach/detach, properties
+
+This adds AttachVolume and DetachVolume methods to a StorageController,
+and related associations.
+
+A "containing" association for Storage->Volumes is added.
+
+Size and BlockSize properties are added to Volume
+
+Change-Id: I3ade1a8532092dbe9db3f26d1f2cf35b5090ea0a
+
+Patch Tracking Bug: b/303071698
+Upstream info / review: https://github.com/CodeConstruct/phosphor-dbus-interfaces/commits/dev/nvme-redfish
+Upstream-Status: Pending
+Justification: CodeConstruct will upstream these patches. After
+               that, we can bump and remove these patches.
+---
+ .../Inventory/Item/Storage.interface.yaml     | 23 +++++++++++++
+ .../Item/StorageController.interface.yaml     | 33 +++++++++++++++++++
+ .../Inventory/Item/Volume.interface.yaml      |  8 +++++
+ 3 files changed, 64 insertions(+)
+
+diff --git a/yaml/xyz/openbmc_project/Inventory/Item/Storage.interface.yaml b/yaml/xyz/openbmc_project/Inventory/Item/Storage.interface.yaml
+index bc8fa8d..b88d4ad 100644
+--- a/yaml/xyz/openbmc_project/Inventory/Item/Storage.interface.yaml
++++ b/yaml/xyz/openbmc_project/Inventory/Item/Storage.interface.yaml
+@@ -1,2 +1,25 @@
+ description: >
+     Implement to provide storage attributes.
++
++associations:
++    - name: storage_controller
++      description: >
++          StorageControllers associated with the Storage object
++      reverse_names: storage
++      required_endpoint_interfaces:
++          - xyz.openbmc_project.Inventory.Item.StorageController
++
++    - name: drive
++      description: >
++          Drive objects associated with the Storage object
++      reverse_names: storage
++      required_endpoint_interfaces:
++          - xyz.openbmc_project.Inventory.Item.Drive
++
++    # TODO: put Drive objects as "containing" too.
++    - name: containing
++      description: >
++          Associated volumes
++      reverse_names: contained
++      required_endpoint_interfaces:
++          - xyz.openbmc_project.Inventory.Item.Volume
+diff --git a/yaml/xyz/openbmc_project/Inventory/Item/StorageController.interface.yaml b/yaml/xyz/openbmc_project/Inventory/Item/StorageController.interface.yaml
+index 554aca3..f731693 100644
+--- a/yaml/xyz/openbmc_project/Inventory/Item/StorageController.interface.yaml
++++ b/yaml/xyz/openbmc_project/Inventory/Item/StorageController.interface.yaml
+@@ -1,2 +1,35 @@
+ description: >
+     Implement to provide storage controller attributes.
++
++methods:
++    - name: AttachVolume
++      description: >
++          Attach a volume to the controller
++      parameters:
++          - name: Path
++            type: object_path
++            description: >
++                Path of the volume
++      errors:
++          - xyz.openbmc_project.Common.Error.ResourceNotFound
++          - xyz.openbmc_project.Common.Error.InternalFailure
++
++    - name: DetachVolume
++      description: >
++          Detach a volume from the controller
++      parameters:
++          - name: Path
++            type: object_path
++            description: >
++                Path of the volume
++      errors:
++          - xyz.openbmc_project.Common.Error.ResourceNotFound
++          - xyz.openbmc_project.Common.Error.InternalFailure
++
++associations:
++    - name: attaching
++      description: >
++          A StorageController may have attached Volume objects.
++      reverse_names: attached_to
++      required_endpoint_interfaces:
++          - xyz.openbmc_project.Inventory.Item.Volume
+diff --git a/yaml/xyz/openbmc_project/Inventory/Item/Volume.interface.yaml b/yaml/xyz/openbmc_project/Inventory/Item/Volume.interface.yaml
+index 4388da3..dec5d9d 100644
+--- a/yaml/xyz/openbmc_project/Inventory/Item/Volume.interface.yaml
++++ b/yaml/xyz/openbmc_project/Inventory/Item/Volume.interface.yaml
+@@ -75,6 +75,14 @@ properties:
+       default: false
+       description: >
+           Indicates whether the LUKS volume is locked.
++    - name: Size
++      type: uint64
++      description: >
++          The allocated size of the volume in bytes.
++    - name: BlockSize
++      type: size
++      description: >
++          The currently used block size, in bytes.
+ 
+ enumerations:
+     - name: EraseMethod
+-- 
+2.42.0.582.g8ccd20d70d-goog
+

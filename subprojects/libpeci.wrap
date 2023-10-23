@@ -1,6 +1,6 @@
 [wrap-git]
 url = https://github.com/openbmc/libpeci.git
-revision = HEAD
+revision = df5c868a14eb0c7e7aa0eb4b44587013c95997b9
 
 [provide]
 libpeci = peci_dep

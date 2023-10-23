@@ -1,6 +1,8 @@
 [wrap-git]
+directory = libnvme
 url = https://github.com/linux-nvme/libnvme.git
-revision = HEAD
+revision = bf85536ff5640e9e3ee04e13d8e5eedd70add550
+diff_files = libnvme/0001-mi_admin_xfer-set-data-fields-based-on-opcode.patch,libnvme/0002-mi-fix-the-return-error-code.patch,libnvme/0003-mi-fix-the-rc-for-nvme_mi_scan_ep.patch,libnvme/0004-mi-avoid-changing-default-ep-timeout-during-admin_pa.patch,libnvme/0005-libnvme-mi-add-timeout-functions-to-.map.patch,libnvme/0001-mi-don-t-return-from-mi_mctp_submit-with-a-tag-held.patch,libnvme/0001-Assign-default-value-on-variable-definition.patch
 
 [provide]
 dependency_names = libnvme_dep, libnvme_mi_dep

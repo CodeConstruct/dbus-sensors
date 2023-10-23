@@ -1,0 +1,120 @@
+From 812761bcba5136f20a1e03f5f1c944cffa46da07 Mon Sep 17 00:00:00 2001
+From: Hao Jiang <jianghao@google.com>
+Date: Wed, 30 Nov 2022 18:00:18 -0800
+Subject: [PATCH 1/4] mi_admin_xfer: set data fields based on opcode
+
+The opcode indicated the data transfer direction. Previously, the xfer
+function didn't check the opcode and force using flags = 03h for all
+data transaction. It created issues on some NVMe controller
+implementation who explicitly checks the flags and doff/dlen with the
+opcode.
+
+Adding the same condition check on host code (libnvme-mi) and setting
+the corresponding fields as well.
+
+Patch Tracking Bug: b/274912759
+Upstream info / review: https://github.com/linux-nvme/libnvme/pull/549
+Upstream-Status: Submitted
+Justification: Some device are unable to handle the command request
+without this patch.
+
+---
+ src/nvme/mi.c | 72 ++++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 66 insertions(+), 6 deletions(-)
+
+diff --git a/src/nvme/mi.c b/src/nvme/mi.c
+index adf1753..693bbb4 100644
+--- a/src/nvme/mi.c
++++ b/src/nvme/mi.c
+@@ -582,12 +582,39 @@ int nvme_mi_admin_xfer(nvme_mi_ctrl_t ctrl,
+ 	}
+ 
+ 	/* bidirectional not permitted (see DLEN definition) */
+-	if (req_data_size && *resp_data_size) {
++	int direction = admin_req->opcode & 0x3;
++	if (direction == NVME_DATA_TFR_BIDIRECTIONAL || (req_data_size && *resp_data_size))
++	{
++		nvme_msg(ctrl->ep->root, LOG_ERR,
++				 "nvme_mi_admin_xfer doesn't support bidirectional commands\n");
+ 		errno = EINVAL;
+ 		return -1;
+ 	}
+-
+-	if (!*resp_data_size && resp_data_offset) {
++	else if (direction == NVME_DATA_TFR_HOST_TO_CTRL && *resp_data_size)
++	{
++		nvme_msg(ctrl->ep->root, LOG_ERR,
++				 "nvme_mi_admin_xfer doesn't support response data on WRITE commands\n");
++		errno = EINVAL;
++		return -1;
++	}
++	else if (direction == NVME_DATA_TFR_CTRL_TO_HOST && req_data_size)
++	{
++		nvme_msg(ctrl->ep->root, LOG_ERR,
++				 "nvme_mi_admin_xfer doesn't support request data on READ commands\n");
++		errno = EINVAL;
++		return -1;
++	}
++	else if (resp_data_offset && (direction != NVME_DATA_TFR_CTRL_TO_HOST || !*resp_data_size))
++	{
++		nvme_msg(ctrl->ep->root, LOG_ERR,
++				 "nvme_mi_admin_xfer invalid offset value\n");
++		errno = EINVAL;
++		return -1;
++	}
++	else if (direction == NVME_DATA_TFR_NO_DATA_TFR && req_data_size && *resp_data_size)
++	{
++		nvme_msg(ctrl->ep->root, LOG_ERR,
++				 "nvme_mi_admin_xfer doesn't support data on NONE_DATA_TRANSFER commands\n");
+ 		errno = EINVAL;
+ 		return -1;
+ 	}
+@@ -611,9 +638,42 @@ int nvme_mi_admin_xfer(nvme_mi_ctrl_t ctrl,
+ 	resp.data_len = *resp_data_size;
+ 
+ 	/* limit the response size, specify offset */
+-	admin_req->flags = 0x3;
+-	admin_req->dlen = cpu_to_le32(resp.data_len & 0xffffffff);
+-	admin_req->doff = cpu_to_le32(resp_data_offset & 0xffffffff);
++	if (direction == NVME_DATA_TFR_HOST_TO_CTRL)
++	{
++		if (req.data_len)
++		{
++			admin_req->flags = 0x1;
++		}
++		else
++		{
++			admin_req->flags = 0;
++		}
++		admin_req->dlen = cpu_to_le32(resp.data_len & 0xffffffff);
++		admin_req->doff = 0;
++	}
++	else if (direction == NVME_DATA_TFR_CTRL_TO_HOST)
++	{
++		if (resp.data_len && resp_data_offset)
++		{
++			admin_req->flags = 0x3;
++		}
++		else if (resp.data_len)
++		{
++			admin_req->flags = 0x1;
++		}
++		else
++		{
++			admin_req->flags = 0x0;
++		}
++		admin_req->dlen = cpu_to_le32(resp.data_len & 0xffffffff);
++		admin_req->doff = cpu_to_le32(resp_data_offset & 0xffffffff);
++	}
++	else
++	{
++		admin_req->flags = 0;
++		admin_req->dlen = 0;
++		admin_req->doff = 0;
++	}
+ 
+ 	rc = nvme_mi_submit(ctrl->ep, &req, &resp);
+ 	if (rc)
+-- 
+2.39.0.314.g84b9a713c41-goog
+

@@ -205,7 +205,7 @@ if get_option('nvme').enabled()
         'NVMeStorage.cpp',
     )
 
-    pdi_dep = dependency ('phosphor-dbus-interfaces')
+    pdi_dep = phosphor_dbus_interfaces_dep
     libnvme = dependency('libnvme', 
         required : true,
         fallback : ['libnvme', 'libnvme_dep'],

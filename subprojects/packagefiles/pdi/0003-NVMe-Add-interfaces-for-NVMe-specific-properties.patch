@@ -1,0 +1,404 @@
+From d5bff30cc422fc0faf11b87b6abf27a4f0609a4d Mon Sep 17 00:00:00 2001
+From: Matt Johnston <matt@codeconstruct.com.au>
+Date: Wed, 25 Jan 2023 16:41:44 +0800
+Subject: [PATCH 3/5] NVMe: Add interfaces for NVMe-specific properties
+
+This adds interfaces with NVMe-specific properties, and a CreateVolume
+method to create a new namespace (Volume) on a NVMe subsystem (Storage
+interface);
+
+Adds CreateVolumeProgressFailure and CreateVolumeProgressSuccess
+interfaces for handling the progress result.
+
+Signed-off-by: Matt Johnston <matt@codeconstruct.com.au>
+Change-Id: Ifafebbb94b4bafd4fc54062c1aeb684cc8cab80e
+
+Patch Tracking Bug: b/303071698
+Upstream info / review: https://github.com/CodeConstruct/phosphor-dbus-interfaces/commits/dev/nvme-redfish
+Upstream-Status: Pending
+Justification: CodeConstruct will upstream these patches. After
+               that, we can bump and remove these patches.
+---
+ .../Nvme/Controller/meson.build               | 15 ++++
+ .../CreateVolumeProgressFailure/meson.build   | 15 ++++
+ .../CreateVolumeProgressSuccess/meson.build   | 15 ++++
+ .../openbmc_project/Nvme/Storage/meson.build  | 15 ++++
+ .../openbmc_project/Nvme/Volume/meson.build   | 15 ++++
+ gen/xyz/openbmc_project/Nvme/meson.build      | 75 +++++++++++++++++++
+ .../Nvme/Controller.interface.yaml            | 32 ++++++++
+ ...CreateVolumeProgressFailure.interface.yaml | 13 ++++
+ ...CreateVolumeProgressSuccess.interface.yaml | 10 +++
+ .../Nvme/Storage.interface.yaml               | 61 +++++++++++++++
+ .../Nvme/Volume.interface.yaml                | 18 +++++
+ 11 files changed, 284 insertions(+)
+ create mode 100644 gen/xyz/openbmc_project/Nvme/Controller/meson.build
+ create mode 100644 gen/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure/meson.build
+ create mode 100644 gen/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess/meson.build
+ create mode 100644 gen/xyz/openbmc_project/Nvme/Storage/meson.build
+ create mode 100644 gen/xyz/openbmc_project/Nvme/Volume/meson.build
+ create mode 100644 yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml
+ create mode 100644 yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml
+ create mode 100644 yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml
+ create mode 100644 yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml
+ create mode 100644 yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml
+
+diff --git a/gen/xyz/openbmc_project/Nvme/Controller/meson.build b/gen/xyz/openbmc_project/Nvme/Controller/meson.build
+new file mode 100644
+index 0000000..71b9743
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/Controller/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/Controller__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/Controller',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure/meson.build b/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure/meson.build
+new file mode 100644
+index 0000000..f8d39fe
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/CreateVolumeProgressFailure__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/CreateVolumeProgressFailure',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess/meson.build b/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess/meson.build
+new file mode 100644
+index 0000000..5aa8d17
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Nvme/Storage/meson.build b/gen/xyz/openbmc_project/Nvme/Storage/meson.build
+new file mode 100644
+index 0000000..0be1566
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/Storage/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/Storage__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/Storage',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Nvme/Volume/meson.build b/gen/xyz/openbmc_project/Nvme/Volume/meson.build
+new file mode 100644
+index 0000000..8840ad9
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Nvme/Volume/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Nvme/Volume__cpp'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Nvme/Volume',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Nvme/meson.build b/gen/xyz/openbmc_project/Nvme/meson.build
+index f822894..131322e 100644
+--- a/gen/xyz/openbmc_project/Nvme/meson.build
++++ b/gen/xyz/openbmc_project/Nvme/meson.build
+@@ -1,4 +1,49 @@
+ # Generated file; do not modify.
++subdir('Controller')
++generated_others += custom_target(
++    'xyz/openbmc_project/Nvme/Controller__markdown'.underscorify(),
++    input: [ '../../../../yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml',  ],
++    output: [ 'Controller.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../yaml',
++        'xyz/openbmc_project/Nvme/Controller',
++    ],
++)
++
++subdir('CreateVolumeProgressFailure')
++generated_others += custom_target(
++    'xyz/openbmc_project/Nvme/CreateVolumeProgressFailure__markdown'.underscorify(),
++    input: [ '../../../../yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml',  ],
++    output: [ 'CreateVolumeProgressFailure.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../yaml',
++        'xyz/openbmc_project/Nvme/CreateVolumeProgressFailure',
++    ],
++)
++
++subdir('CreateVolumeProgressSuccess')
++generated_others += custom_target(
++    'xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess__markdown'.underscorify(),
++    input: [ '../../../../yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml',  ],
++    output: [ 'CreateVolumeProgressSuccess.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../yaml',
++        'xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess',
++    ],
++)
++
+ subdir('Status')
+ generated_others += custom_target(
+     'xyz/openbmc_project/Nvme/Status__markdown'.underscorify(),
+@@ -14,3 +59,33 @@ generated_others += custom_target(
+     ],
+ )
+ 
++subdir('Storage')
++generated_others += custom_target(
++    'xyz/openbmc_project/Nvme/Storage__markdown'.underscorify(),
++    input: [ '../../../../yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml',  ],
++    output: [ 'Storage.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../yaml',
++        'xyz/openbmc_project/Nvme/Storage',
++    ],
++)
++
++subdir('Volume')
++generated_others += custom_target(
++    'xyz/openbmc_project/Nvme/Volume__markdown'.underscorify(),
++    input: [ '../../../../yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml',  ],
++    output: [ 'Volume.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../yaml',
++        'xyz/openbmc_project/Nvme/Volume',
++    ],
++)
++
+diff --git a/yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml b/yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml
+new file mode 100644
+index 0000000..bec433f
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Nvme/Controller.interface.yaml
+@@ -0,0 +1,32 @@
++description: >
++    NVMe-specific details of a StorageController.
++properties:
++    - name: NVMeVersion
++      type: string
++      description: >
++          The NVMe protocol version as a string, such as "1.4" or "1.2.1"
++    - name: ControllerType
++      type: enum[self.NVMeControllerType]
++      description: >
++          The controller type reported by the NVMe controller.
++
++enumerations:
++    - name: NVMeControllerType
++      description: >
++          The type of NVMe Controller
++      values:
++          - name: IO
++            description: >
++                An IO Controller
++          - name: Administrative
++            description: >
++                An Administrative controller
++          - name: Discovery
++            description: >
++                A Discovery controller
++          - name: NotReported
++            description: >
++                Value 0, from NVMe specification prior to 1.4
++          - name: Unknown
++            description: >
++                Other values
+diff --git a/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml b/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml
+new file mode 100644
+index 0000000..52ba044
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressFailure.interface.yaml
+@@ -0,0 +1,13 @@
++description: >
++    A failed CreateVolume operation from a xyz.openbmc_project.NVMe.Storage
++    object.
++
++properties:
++    - name: ErrorName
++      type: string
++      description: >
++          The error returned
++    - name: ErrorDescription
++      type: string
++      description: >
++          A description of the failure
+diff --git a/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml b/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml
+new file mode 100644
+index 0000000..4f86e51
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Nvme/CreateVolumeProgressSuccess.interface.yaml
+@@ -0,0 +1,10 @@
++description: >
++    A successful CreateVolume operation from a xyz.openbmc_project.NVMe.Storage
++    object.
++
++properties:
++    - name: VolumePath
++      type: object_path
++      description: >
++          Set to the created Volume path once the operation successfully
++          completes.
+diff --git a/yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml b/yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml
+new file mode 100644
+index 0000000..3694800
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Nvme/Storage.interface.yaml
+@@ -0,0 +1,61 @@
++description: >
++    NVMe-specific details of a Storage object.
++methods:
++    - name: CreateVolume
++      description: >
++          Create a Volume (NVMe Namespace). This returns immediately, the
++          creation completion can be monitored on the returned path.
++      parameters:
++          - name: Size
++            type: uint64
++            description: >
++                Size of the new volume in bytes
++          - name: LBAFormat
++            type: size
++            description: >
++                The index value of the LBA Format to use for the new namespace,
++                from SupportedFormats property.
++          - name: MetadataAtEnd
++            type: boolean
++            description: >
++                Indicates that the metadata is transferred at the end of the
++                data LBA. This is bit 4 of the NVMe FLBAS field.
++
++      returns:
++          - name: InProgress
++            type: object_path
++            description: >
++                Returned to indicate that the CreateVolume operation is
++                continuing in the background. The path implements
++                xyz.openbmc_project.Common.Progress and can be polled to
++                determine when the operation has completed. After completion it
++                will also implement either CreateVolumeProgressSuccess or
++                CreateVolumeProgressFailure with the result.
++
++properties:
++    - name: SupportedFormats
++      type: array[struct[size, size, size, enum[self.RelativePerformance]]]
++      description: >
++          Returns structs of (index, data_size, metadata_size, rp), the list of
++          formats reported by LBA Format in the Identify Namespace structure for
++          NSID 0 (common to all namespaces). The index field can be used as the
++          .CreateVolume LBAFormat parameter.
++
++enumerations:
++    - name: RelativePerformance
++      description: >
++          Relative performance of a LBA format type. Corresponds to the NVMe RP
++          field.
++      values:
++          - name: Best
++          - name: Better
++          - name: Good
++          - name: Degraded
++
++associations:
++    - name: awaiting
++      description: >
++          Progress for a CreateVolume operation
++      reverse_names: awaited
++      required_endpoint_interfaces:
++          - xyz.openbmc_project.Common.Progress
+diff --git a/yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml b/yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml
+new file mode 100644
+index 0000000..b80acb3
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Nvme/Volume.interface.yaml
+@@ -0,0 +1,18 @@
++description: >
++    Details of a Volume that is a NVMe namespace.
++properties:
++    - name: NamespaceId
++      type: uint32
++      description: >
++          The NVMe Namespace Id (NSID)
++
++    - name: LBAFormat
++      type: size
++      description: >
++          Used LBA Format index
++
++    - name: MetadataAtEnd
++      type: boolean
++      description: >
++          Whether metadata is transferred at the end of the data LBA. This
++          corresponds to FLBAS bit 4.
+-- 
+2.42.0.582.g8ccd20d70d-goog
+

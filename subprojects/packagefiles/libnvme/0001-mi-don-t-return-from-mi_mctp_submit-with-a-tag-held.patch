@@ -1,0 +1,48 @@
+From 433f3a86672f10ea5ff654148680f2c02c5cb2bd Mon Sep 17 00:00:00 2001
+From: Jeremy Kerr <jk@codeconstruct.com.au>
+Date: Wed, 24 May 2023 17:29:33 +0800
+Subject: [PATCH] mi: don't return from mi_mctp_submit with a tag held
+
+If the poll() times-out or fails, we'll exit early from
+nvme_mi_mctp_submit still holding the tag reservation. When using an i2c
+transport, this may mean we hold a lock on the i2c bus with no way to
+release.
+
+Instead, always drop the tag on function exit.
+
+Patch Tracking Bug: b/284156383
+Upstream info / review:
+ - https://github.com/CodeConstruct/libnvme/commit/cec9288b08a7d78552c8b46c3b004be8badc6663
+Upstream-Status: Submitted
+Justification: bugfix(b/283271613)
+
+Fixes: 6a08780 ("mi-mctp: Add timeout support to MCTP transport")
+Signed-off-by: Jeremy Kerr <jk@codeconstruct.com.au>
+---
+ src/nvme/mi-mctp.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/nvme/mi-mctp.c b/src/nvme/mi-mctp.c
+index 0c5972a5..a0831576 100644
+--- a/src/nvme/mi-mctp.c
++++ b/src/nvme/mi-mctp.c
+@@ -333,13 +333,14 @@ retry:
+ 		nvme_msg(ep->root, LOG_ERR,
+ 			 "Failed polling on MCTP socket: %m");
+ 		errno = errno_save;
+-		return -1;
++		goto out;
+ 	}
+ 
+ 	if (rc == 0) {
+ 		nvme_msg(ep->root, LOG_DEBUG, "Timeout on MCTP socket");
+ 		errno = ETIMEDOUT;
+-		return -1;
++		rc = -1;
++		goto out;
+ 	}
+ 
+ 	rc = -1;
+-- 
+2.40.1.698.g37aff9b760-goog
+

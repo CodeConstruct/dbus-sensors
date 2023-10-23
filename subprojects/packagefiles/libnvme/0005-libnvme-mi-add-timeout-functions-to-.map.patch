@@ -1,0 +1,34 @@
+From 8e5480f6c43adf0e72fc1c70f898b74d1a069abc Mon Sep 17 00:00:00 2001
+From: Hao Jiang <jianghao@google.com>
+Date: Tue, 10 Jan 2023 11:04:41 -0800
+Subject: [PATCH 5/5] libnvme-mi: add timeout functions to .map
+
+Need to export nvme_mi_ep_set_timeout and nvme_mi_ep_get_timeout. These
+two functions were defined but left over in .map file.
+
+Signed-off-by: Hao Jiang <jianghao@google.com>
+
+Patch Tracking Bug: b/274913451
+Upstream info / review: https://github.com/linux-nvme/libnvme/pull/554
+Upstream-Status: Accepted
+Justification: We are stealing these API from release 1.3 into 1.1
+---
+ src/libnvme-mi.map | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/libnvme-mi.map b/src/libnvme-mi.map
+index afee5a9..4dc46a5 100644
+--- a/src/libnvme-mi.map
++++ b/src/libnvme-mi.map
+@@ -45,6 +45,8 @@ LIBNVME_MI_1_1 {
+ 		nvme_mi_open_mctp;
+ 		nvme_mi_scan_mctp;
+ 		nvme_mi_scan_ep;
++		nvme_mi_ep_get_timeout;
++		nvme_mi_ep_set_timeout;
+ 	local:
+ 		*;
+ };
+-- 
+2.39.0.314.g84b9a713c41-goog
+

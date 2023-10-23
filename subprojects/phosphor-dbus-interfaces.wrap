@@ -1,0 +1,8 @@
+[wrap-git]
+directory = pdi
+url = https://github.com/openbmc/phosphor-dbus-interfaces.git
+revision = HEAD
+diff_files = pdi/0001-Inventory-Add-volume-attach-detach-properties.patch,pdi/0002-Inventory-Add-StorageControllerSecurity-interface.patch,pdi/0003-NVMe-Add-interfaces-for-NVMe-specific-properties.patch,pdi/0004-Add-Common.DeviceOperationFailed-error.patch,pdi/0005-Add-DriveErase-interface.patch
+
+[provide]
+pdi = phosphor_dbus_interfaces_dep

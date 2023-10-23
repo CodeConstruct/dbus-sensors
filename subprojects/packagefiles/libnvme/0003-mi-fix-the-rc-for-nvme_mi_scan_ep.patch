@@ -1,0 +1,34 @@
+From 1d93137650f95fb6fc2e9c381e64e6e1a955c577 Mon Sep 17 00:00:00 2001
+From: Hao Jiang <jianghao@google.com>
+Date: Wed, 7 Dec 2022 14:55:40 -0800
+Subject: [PATCH 3/4] mi: fix the rc for nvme_mi_scan_ep
+
+nvme_mi_scan_ep should return error code of calling function.
+
+Signed-off-by: Hao Jiang <jianghao@google.com>
+
+Patch Tracking Bug: b/274912874
+Upstream info / review: N/A
+Upstream-Status: Pending
+Justification: Improve the return code handling.
+Also, I didn't find the pull request for this patch for now. Assume it's not sent out yet.
+---
+ src/nvme/mi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/nvme/mi.c b/src/nvme/mi.c
+index c33a2d3..80330af 100644
+--- a/src/nvme/mi.c
++++ b/src/nvme/mi.c
+@@ -322,7 +322,7 @@ int nvme_mi_scan_ep(nvme_mi_ep_t ep, bool force_rescan)
+ 
+ 	rc = nvme_mi_mi_read_mi_data_ctrl_list(ep, 0, &list);
+ 	if (rc)
+-		return -1;
++		return rc;
+ 
+ 	n_ctrl = le16_to_cpu(list.num);
+ 	if (n_ctrl > NVME_ID_CTRL_LIST_MAX) {
+-- 
+2.39.0.314.g84b9a713c41-goog
+

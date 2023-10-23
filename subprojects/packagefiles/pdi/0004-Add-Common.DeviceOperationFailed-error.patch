@@ -1,0 +1,30 @@
+From d2ba3a8418792106cbb746de2d07f4e884466ec5 Mon Sep 17 00:00:00 2001
+From: Matt Johnston <matt@codeconstruct.com.au>
+Date: Wed, 17 May 2023 13:02:03 +0800
+Subject: [PATCH 4/5] Add Common.DeviceOperationFailed error
+
+Signed-off-by: Matt Johnston <matt@codeconstruct.com.au>
+Change-Id: I8afb11dcb448367c74b59ecb17c95c75530d75d2
+
+Patch Tracking Bug: b/303071698
+Upstream info / review: https://github.com/CodeConstruct/phosphor-dbus-interfaces/commits/dev/nvme-redfish
+Upstream-Status: Pending
+Justification: CodeConstruct will upstream these patches. After
+               that, we can bump and remove these patches.
+---
+ yaml/xyz/openbmc_project/Common.errors.yaml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/yaml/xyz/openbmc_project/Common.errors.yaml b/yaml/xyz/openbmc_project/Common.errors.yaml
+index c59f7fc..dafafcc 100644
+--- a/yaml/xyz/openbmc_project/Common.errors.yaml
++++ b/yaml/xyz/openbmc_project/Common.errors.yaml
+@@ -18,3 +18,5 @@
+   description: The service is temporarily unavailable.
+ - name: UnsupportedRequest
+   description: The request is unsupported.
++- name: DeviceOperationFailed
++  description: A hardware device failed to perform an operation.
+-- 
+2.42.0.582.g8ccd20d70d-goog
+

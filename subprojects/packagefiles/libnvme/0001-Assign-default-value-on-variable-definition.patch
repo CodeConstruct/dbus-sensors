@@ -1,0 +1,54 @@
+From 8f8b3179a42626388ebf4994dd2f89ba2ebaa3ad Mon Sep 17 00:00:00 2001
+From: Hao Jiang <jianghao@google.com>
+Date: Wed, 25 Oct 2023 15:21:14 -0700
+Subject: [PATCH] Assign default value on variable definition
+
+Fix the compiler error when -Og:
+may be used uninitialized [-Werror=maybe-uninitialized]
+
+Signed-off-by: Hao Jiang <jianghao@google.com>
+---
+ examples/mi-mctp.c | 4 ++--
+ src/nvme/mi-mctp.c | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/examples/mi-mctp.c b/examples/mi-mctp.c
+index c9a38523..85170932 100644
+--- a/examples/mi-mctp.c
++++ b/examples/mi-mctp.c
+@@ -677,8 +677,8 @@ int main(int argc, char **argv)
+ 	nvme_root_t root;
+ 	nvme_mi_ep_t ep;
+ 	bool dbus = false, usage = true;
+-	uint8_t eid;
+-	int rc = 0, net;
++	uint8_t eid = 0;
++	int rc = 0, net = 0;
+ 
+ 	if (argc >= 2 && strcmp(argv[1], "dbus") == 0) {
+ 		usage = false;
+diff --git a/src/nvme/mi-mctp.c b/src/nvme/mi-mctp.c
+index a0831576..32e2227c 100644
+--- a/src/nvme/mi-mctp.c
++++ b/src/nvme/mi-mctp.c
+@@ -109,7 +109,7 @@ static __u8 nvme_mi_mctp_tag_alloc(struct nvme_mi_ep *ep)
+ 	struct nvme_mi_transport_mctp *mctp;
+ 	struct mctp_ioc_tag_ctl ctl = { 0 };
+ 	static bool logged;
+-	int rc;
++	int rc = 0;
+ 
+ 	mctp = ep->transport_data;
+ 
+@@ -594,7 +594,7 @@ static int handle_mctp_endpoint(nvme_root_t root, const char* objpath,
+ 	bool have_eid = false, have_net = false, have_nvmemi = false;
+ 	mctp_eid_t eid;
+ 	int net;
+-	int rc;
++	int rc = 0;
+ 
+ 	/* for each property */
+ 	for (;;) {
+-- 
+2.42.0.758.gaed0368e0e-goog
+

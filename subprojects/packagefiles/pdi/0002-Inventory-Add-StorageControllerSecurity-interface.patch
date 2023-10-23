@@ -1,0 +1,134 @@
+From 3d4c549e998de02e54f1333a5a1a49f8bfcc03cd Mon Sep 17 00:00:00 2001
+From: Matt Johnston <matt@codeconstruct.com.au>
+Date: Wed, 25 Jan 2023 16:39:53 +0800
+Subject: [PATCH 2/5] Inventory: Add StorageControllerSecurity interface
+
+This provides SecuritySend and SecurityReceive methods
+for StorageController objects. This corresponds to commands provided
+by NVMe controllers.
+
+Signed-off-by: Matt Johnston <matt@codeconstruct.com.au>
+Change-Id: I73e12eab8a696d369329776049e3c15bd0a94d04
+
+Patch Tracking Bug: b/303071698
+Upstream info / review: https://github.com/CodeConstruct/phosphor-dbus-interfaces/commits/dev/nvme-redfish
+Upstream-Status: Pending
+Justification: CodeConstruct will upstream these patches. After
+               that, we can bump and remove these patches.
+---
+ .../StorageControllerSecurity/meson.build     | 15 ++++++
+ .../Inventory/Item/meson.build                | 15 ++++++
+ .../StorageControllerSecurity.interface.yaml  | 53 +++++++++++++++++++
+ 3 files changed, 83 insertions(+)
+ create mode 100644 gen/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity/meson.build
+ create mode 100644 yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml
+
+diff --git a/gen/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity/meson.build b/gen/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity/meson.build
+new file mode 100644
+index 0000000..08f3a83
+--- /dev/null
++++ b/gen/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity/meson.build
+@@ -0,0 +1,15 @@
++# Generated file; do not modify.
++generated_sources += custom_target(
++    'xyz/openbmc_project/Inventory/Item/StorageControllerSecurity__cpp'.underscorify(),
++    input: [ '../../../../../../yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml',  ],
++    output: [ 'common.hpp', 'server.cpp', 'server.hpp', 'client.hpp',  ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'cpp',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../../yaml',
++        'xyz/openbmc_project/Inventory/Item/StorageControllerSecurity',
++    ],
++)
++
+diff --git a/gen/xyz/openbmc_project/Inventory/Item/meson.build b/gen/xyz/openbmc_project/Inventory/Item/meson.build
+index 602be81..38a0f33 100644
+--- a/gen/xyz/openbmc_project/Inventory/Item/meson.build
++++ b/gen/xyz/openbmc_project/Inventory/Item/meson.build
+@@ -403,6 +403,21 @@ generated_others += custom_target(
+     ],
+ )
+ 
++subdir('StorageControllerSecurity')
++generated_others += custom_target(
++    'xyz/openbmc_project/Inventory/Item/StorageControllerSecurity__markdown'.underscorify(),
++    input: [ '../../../../../yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml',  ],
++    output: [ 'StorageControllerSecurity.md' ],
++    depend_files: sdbusplusplus_depfiles,
++    command: [
++        sdbuspp_gen_meson_prog, '--command', 'markdown',
++        '--output', meson.current_build_dir(),
++        '--tool', sdbusplusplus_prog,
++        '--directory', meson.current_source_dir() / '../../../../../yaml',
++        'xyz/openbmc_project/Inventory/Item/StorageControllerSecurity',
++    ],
++)
++
+ subdir('System')
+ generated_others += custom_target(
+     'xyz/openbmc_project/Inventory/Item/System__markdown'.underscorify(),
+diff --git a/yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml b/yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml
+new file mode 100644
+index 0000000..38e58f0
+--- /dev/null
++++ b/yaml/xyz/openbmc_project/Inventory/Item/StorageControllerSecurity.interface.yaml
+@@ -0,0 +1,53 @@
++description: >
++    Implement to provide storage controller security methods.
++
++methods:
++    - name: SecuritySend
++      description: >
++          Send a Security Protocol message to the storage controller. Fields are
++          defined by SPC-5.
++      parameters:
++          - name: Protocol
++            type: byte
++            description: >
++                The Security Protocol field of the request
++          - name: ProtocolSpecific
++            type: uint16
++            description: >
++                The Security Protocol Specific field of the request
++          - name: Data
++            type: array[byte]
++            description: >
++                Binary payload data of the request
++      errors:
++          - xyz.openbmc_project.Common.Error.UnsupportedRequest
++          - xyz.openbmc_project.Common.Error.InvalidArgument
++          - xyz.openbmc_project.Common.Error.InternalFailure
++
++    - name: SecurityReceive
++      description: >
++          Receive a Security Protocol message from the storage controller.
++          Fields are defined by SPC-5.
++      parameters:
++          - name: Protocol
++            type: byte
++            description: >
++                The Security Protocol field of the request
++          - name: ProtocolSpecific
++            type: uint16
++            description: >
++                The Security Protocol Specific field of the request
++          - name: AllocationLength
++            type: size
++            description: >
++                The length of binary data to allow to be returned
++      returns:
++          - name: Data
++            type: array[byte]
++            description: >
++                Binary response data. The length of the data will be at most
++                AllocationLength.
++      errors:
++          - xyz.openbmc_project.Common.Error.UnsupportedRequest
++          - xyz.openbmc_project.Common.Error.InvalidArgument
++          - xyz.openbmc_project.Common.Error.InternalFailure
+-- 
+2.42.0.582.g8ccd20d70d-goog
+

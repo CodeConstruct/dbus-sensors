@@ -1,0 +1,92 @@
+From d9dc48733171532e16513ca9df716eca833b2f29 Mon Sep 17 00:00:00 2001
+From: Jinliang Wang <jinliangw@google.com>
+Date: Thu, 5 Jan 2023 10:10:44 -0800
+Subject: [PATCH] mi: avoid changing default ep timeout during admin_passthru
+
+Before the fix, the timeout will only increase and will change the
+default settings. After the fix, the timeout can be decrease and
+also it won't change the default setttings.
+
+Also, we move nvme_mi_admin_admin_passthru to LIBNVME_MI_1_2
+In this way we can use "admin_passthru" in libnvme 1.2.0;
+We can remove this change after upstream `libnvme` upgrades to 1.3.0
+
+Signed-off-by: Jinliang Wang <jinliangw@google.com>
+
+Patch Tracking Bug: b/274912878
+Upstream info / review: N/A
+Upstream-Status: Pending
+Justification: bugfix
+---
+ src/libnvme-mi.map |  2 +-
+ src/nvme/mi.c      | 19 ++++++++++++++-----
+ 2 files changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/src/libnvme-mi.map b/src/libnvme-mi.map
+index 739f135..afee5a9 100644
+--- a/src/libnvme-mi.map
++++ b/src/libnvme-mi.map
+@@ -1,7 +1,6 @@
+ LIBNVME_MI_1_3 {
+ 	global:
+ 		nvme_mi_set_probe_enabled;
+-		nvme_mi_admin_admin_passthru;
+ };
+ 
+ LIBNVME_MI_1_2 {
+@@ -15,6 +14,7 @@ LIBNVME_MI_1_2 {
+ 		nvme_mi_admin_fw_download;
+ 		nvme_mi_admin_fw_commit;
+ 		nvme_mi_status_to_string;
++		nvme_mi_admin_admin_passthru;
+ };
+ 
+ LIBNVME_MI_1_1 {
+diff --git a/src/nvme/mi.c b/src/nvme/mi.c
+index 80330af..a41f786 100644
+--- a/src/nvme/mi.c
++++ b/src/nvme/mi.c
+@@ -696,6 +696,7 @@ int nvme_mi_admin_admin_passthru(nvme_mi_ctrl_t ctrl, __u8 opcode, __u8 flags,
+ 	struct nvme_mi_admin_req_hdr req_hdr;
+ 	struct nvme_mi_resp resp;
+ 	struct nvme_mi_req req;
++	unsigned int ori_timeout;
+ 	int rc;
+ 	int direction = opcode & 0x3;
+ 	bool has_write_data = false;
+@@ -722,11 +723,6 @@ int nvme_mi_admin_admin_passthru(nvme_mi_ctrl_t ctrl, __u8 opcode, __u8 flags,
+ 			has_read_data = true;
+ 	}
+ 
+-	if (timeout_ms > nvme_mi_ep_get_timeout(ctrl->ep)) {
+-		/* Set timeout if user needs a bigger timeout */
+-		nvme_mi_ep_set_timeout(ctrl->ep, timeout_ms);
+-	}
+-
+ 	nvme_mi_admin_init_req(&req, &req_hdr, ctrl->id, opcode);
+ 	req_hdr.cdw1 = cpu_to_le32(nsid);
+ 	req_hdr.cdw2 = cpu_to_le32(cdw2);
+@@ -758,7 +754,20 @@ int nvme_mi_admin_admin_passthru(nvme_mi_ctrl_t ctrl, __u8 opcode, __u8 flags,
+ 		resp.data_len = data_len;
+ 	}
+ 
++	if (timeout_ms != 0)
++	{
++		/* User may forget to set timeout_ms, in this case
++		*    we will just use the default settings.
++		*/
++		ori_timeout = nvme_mi_ep_get_timeout(ctrl->ep);
++		nvme_mi_ep_set_timeout(ctrl->ep, timeout_ms);
++	}
+ 	rc = nvme_mi_submit(ctrl->ep, &req, &resp);
++	if (timeout_ms != 0)
++	{
++		nvme_mi_ep_set_timeout(ctrl->ep, ori_timeout);
++	}
++
+ 	if (rc)
+ 		return rc;
+ 
+-- 
+2.42.0.283.g2d96d420d3-goog
+
