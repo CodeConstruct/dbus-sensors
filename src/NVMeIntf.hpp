@@ -175,6 +175,7 @@ class NVMeMiIntf
 
     virtual ~NVMeMiIntf() = default;
 
+    virtual bool flushOperations(std::function<void()>&& cb) = 0;
     virtual void adminIdentify(
         nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid,
         uint16_t cntid,

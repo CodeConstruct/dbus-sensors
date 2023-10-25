@@ -35,6 +35,10 @@ class NVMeMiMock :
                     std::function<void(const std::error_code& ec,
                                        const std::vector<nvme_mi_ctrl_t>& list)>
                         cb) { return fake->miScanCtrl(std::move(cb)); });
+        ON_CALL(*this, flushOperations)
+            .WillByDefault([this](std::function<void()>&& cb) {
+            return fake->flushOperations(std::move(cb));
+        });
         ON_CALL(*this, adminIdentify)
             .WillByDefault(
                 [this](
@@ -84,6 +88,7 @@ class NVMeMiMock :
                 (std::function<void(const std::error_code&,
                                     const std::vector<nvme_mi_ctrl_t>&)>),
                 (override));
+    MOCK_METHOD(bool, flushOperations, (std::function<void()>&&));
     MOCK_METHOD(void, adminIdentify,
                 (nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid,
                  uint16_t cntid,

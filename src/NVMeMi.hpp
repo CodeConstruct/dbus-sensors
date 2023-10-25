@@ -23,6 +23,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     {
         return eid;
     }
+    bool flushOperations(std::function<void()>&& cb) override;
     void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,
                            nvme_mi_nvm_ss_health_status*)>&& cb) override;
