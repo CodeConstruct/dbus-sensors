@@ -6,6 +6,7 @@
 #include "NVMePlugin.hpp"
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"
+#include "xyz/openbmc_project/Common/error.hpp"
 
 #include <dlfcn.h>
 
@@ -220,7 +221,15 @@ void NVMeSubsystem::markFunctional(bool toggle)
             throw std::runtime_error(
                 "cannot stop: the subsystem is intiatilzing");
         }
-        status = Status::Stop;
+
+        if (status == Status::Terminating || status == Status::Stop)
+        {
+            return;
+        }
+
+        assert(status == Status::Start || status == Status::Aborting);
+
+        status = Status::Terminating;
         if (plugin)
         {
             plugin->stop();
@@ -228,8 +237,48 @@ void NVMeSubsystem::markFunctional(bool toggle)
         // TODO: the controller should be stopped after controller level polling
         // is enabled
 
+        // Tell any progress objects we're aborting the operation
+        for (auto& [_, v] : createProgress)
+        {
+            v->abort();
+        }
+
+        // Tell the controllers they mustn't post further jobs
+        primaryController->disable();
+        for (auto& [_, v] : controllers)
+        {
+            v.first->disable();
+        }
+
+        // Avoid triggering C*V D-Bus updates by clearing internal state
+        // directly. The controller and volume objects and interfaces will be
+        // removed which will update the mapper.
+        attached.clear();
+        volumes.clear();
+        primaryController.reset();
         controllers.clear();
         // plugin.reset();
+
+        updateAssociation();
+
+        if (nvmeIntf.getProtocol() == NVMeIntf::Protocol::NVMeMI)
+        {
+            auto nvme =
+                std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
+
+            bool posted =
+                nvme->flushOperations([self{shared_from_this()}]() mutable {
+                self->status = Status::Stop;
+            });
+
+            if (!posted)
+            {
+                std::cerr
+                    << "Failed to flush operations, subsystem has stalled!"
+                    << std::endl;
+            }
+        }
+
         return;
     }
 
@@ -244,7 +293,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
             "cannot start: subsystem initialisation has aborted and must transition to stopped");
     }
 
-    if (status == Status::Start)
+    if (status == Status::Start || status == Status::Terminating)
     {
         // Prevent consecutive calls to NVMeMiIntf::miScanCtrl()
         //
@@ -647,10 +696,18 @@ sdbusplus::message::object_path
     NVMeSubsystem::createVolume(boost::asio::yield_context yield, uint64_t size,
                                 size_t lbaFormat, bool metadataAtEnd)
 {
+    if (status != Status::Start)
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     // #0 (sequence of runtime/callbacks)
     auto prog_id = getRandomId();
 
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     using submit_callback_t = void(std::tuple<nvme_ex_ptr>);
@@ -726,6 +783,12 @@ void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
         }
         auto prog = p->second;
 
+        if (prog->status() == OperationStatus::Aborted)
+        {
+            return;
+        }
+        assert(status == Status::Start);
+
         if (ex)
         {
             prog->createFailure(ex);
@@ -760,7 +823,17 @@ std::string NVMeSubsystem::volumePath(uint32_t nsid) const
 
 void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
 {
+    if (status != Status::Start)
+    {
+        std::cerr << "Subsystem not in Start state, have "
+                  << static_cast<int>(status) << std::endl;
+        return;
+    }
+
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS,
                         nsid, NVME_CNTLID_NONE,
@@ -822,7 +895,11 @@ void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
 
 void NVMeSubsystem::updateVolumes()
 {
+    assert(status == Status::Start);
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminListNamespaces(
         ctrl, [ctrl, intf, self{shared_from_this()}](
@@ -863,7 +940,11 @@ void NVMeSubsystem::updateVolumes()
 
 void NVMeSubsystem::fillDrive()
 {
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    assert(status == Status::Start);
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL,
                         NVME_NSID_NONE, NVME_CNTLID_NONE,
@@ -946,6 +1027,12 @@ std::vector<uint32_t> NVMeSubsystem::attachedVolumes(uint16_t ctrlId) const
 
 void NVMeSubsystem::attachCtrlVolume(uint16_t c, uint32_t ns)
 {
+    if (status != Status::Start)
+    {
+        std::cerr << "Subsystem is not in Start state: "
+                  << static_cast<int>(status) << std::endl;
+        return;
+    }
     if (!controllers.contains(c))
     {
         std::cerr << "attachCtrlVolume bad controller " << c << std::endl;
@@ -963,6 +1050,12 @@ void NVMeSubsystem::attachCtrlVolume(uint16_t c, uint32_t ns)
 
 void NVMeSubsystem::detachCtrlVolume(uint16_t c, uint32_t ns)
 {
+    if (status != Status::Start)
+    {
+        std::cerr << "Subsystem is not in Start state: "
+                  << static_cast<int>(status) << std::endl;
+        return;
+    }
     if (!controllers.contains(c))
     {
         std::cerr << "detachCtrlVolume bad controller " << c << std::endl;
@@ -980,6 +1073,12 @@ void NVMeSubsystem::detachCtrlVolume(uint16_t c, uint32_t ns)
 
 void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
 {
+    if (status != Status::Start)
+    {
+        std::cerr << "Subsystem is not in Start state: "
+                  << static_cast<int>(status) << std::endl;
+        return;
+    }
     if (!volumes.contains(ns))
     {
         std::cerr << "detachAllCtrlVolume bad ns " << ns << std::endl;
@@ -998,6 +1097,8 @@ void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
 // Will throw a nvme_ex_ptr if the NS already exists */
 std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
 {
+    assert(status == Status::Start);
+
     if (volumes.contains(ns.namespaceId))
     {
         std::string err_msg = std::string("Internal error, NSID exists " +
@@ -1040,7 +1141,11 @@ void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
 
 void NVMeSubsystem::querySupportedFormats()
 {
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    assert(status == Status::Start);
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(
         ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS, NVME_NSID_ALL,
@@ -1084,7 +1189,15 @@ void NVMeSubsystem::querySupportedFormats()
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
                                  std::shared_ptr<NVMeVolume> volume)
 {
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    if (status != Status::Start)
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     using callback_t = void(std::tuple<std::error_code, int>);
@@ -1112,7 +1225,15 @@ void NVMeSubsystem::startSanitize(
     const NVMeSanitizeParams& params,
     std::function<void(nvme_ex_ptr ex)>&& submitCb)
 {
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    if (status != Status::Start)
+    {
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     intf->adminSanitize(ctrl, params.nvmeAction(), params.passes,
@@ -1125,7 +1246,17 @@ void NVMeSubsystem::sanitizeStatus(
                        bool completed, uint16_t sstat, uint16_t sprog,
                        uint32_t scdw10)>&& cb)
 {
-    nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
+    if (status != Status::Start)
+    {
+        std::cerr << "Subsystem not in Start state, have "
+                  << static_cast<int>(status) << std::endl;
+        return;
+    }
+
+    auto pc = getPrimaryController();
+    assert(!pc->disabled());
+    nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
+
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     intf->adminGetLogPage(

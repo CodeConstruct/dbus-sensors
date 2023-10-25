@@ -76,12 +76,23 @@ class NVMeSubsystem :
 
     NVMeIntf nvmeIntf;
 
+    /*
+     * stateDiagram
+     *     [*] --> Stop
+     *     Stop --> Intiatilzing
+     *     Intiatilzing --> Start
+     *     Intiatilzing --> Aborting
+     *     Start --> Terminating
+     *     Aborting --> Terminating
+     *     Terminating --> Stop
+     */
     enum class Status
     {
         Stop,
         Intiatilzing,
         Aborting,
         Start,
+        Terminating,
     };
 
     Status status;
@@ -124,6 +135,7 @@ class NVMeSubsystem :
     std::shared_ptr<NVMeControllerEnabled> primaryController;
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
+
     void createAssociation();
     void updateAssociation();
     std::vector<Association> makeAssociation() const;
