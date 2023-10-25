@@ -74,6 +74,20 @@ class NVMeController
              std::max(sizeof(uint16_t), sizeof(void*))));
     }
 
+    /*
+     * Disable is called to prevent issuing further queries against the
+     * controller
+     */
+    void disable()
+    {
+        nvmeCtrl = nullptr;
+    }
+
+    bool disabled() const
+    {
+        return nvmeCtrl == nullptr;
+    }
+
     /**
      * @brief Get the NVMe controller handle
      */
