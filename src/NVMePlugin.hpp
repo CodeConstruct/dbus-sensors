@@ -18,8 +18,7 @@ class NVMeControllerPlugin
         nvmeController(cntl)
     {}
 
-    virtual ~NVMeControllerPlugin()
-    {}
+    virtual ~NVMeControllerPlugin() {}
     virtual getlogpage_t getGetLogPageHandler()
     {
         return {};
@@ -108,8 +107,7 @@ class NVMePlugin
                const SensorData& /*config*/) :
         subsystem(std::move(subsys)){};
 
-    virtual ~NVMePlugin()
-    {}
+    virtual ~NVMePlugin() {}
 
     std::shared_ptr<NVMeControllerPlugin>
         createControllerPlugin(const NVMeController& controller,

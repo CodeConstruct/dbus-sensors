@@ -187,9 +187,10 @@ class NVMeMiIntf
                                std::function<void(const std::error_code&,
                                                   nvme_status_field)>&& cb) = 0;
 
-    virtual void adminFwDownload(nvme_mi_ctrl_t ctrl, std::string firmwarefile,
-                               std::function<void(const std::error_code&,
-                                                  nvme_status_field)>&& cb) = 0;
+    virtual void adminFwDownload(
+        nvme_mi_ctrl_t ctrl, std::string firmwarefile,
+        std::function<void(const std::error_code&, nvme_status_field)>&&
+            cb) = 0;
 
     virtual void adminSecuritySend(
         nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
@@ -201,7 +202,7 @@ class NVMeMiIntf
         uint32_t transfer_length,
         std::function<void(const std::error_code&, int nvme_status,
                            const std::span<uint8_t> data)>&& cb) = 0;
-    
+
     virtual void adminNonDataCmd(
         nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
         uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,

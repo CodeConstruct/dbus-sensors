@@ -19,8 +19,7 @@ template <typename F>
 struct CopyableCallback
 {
   public:
-    CopyableCallback(F&& cb) : cb(std::make_shared<F>(std::move(cb)))
-    {}
+    CopyableCallback(F&& cb) : cb(std::make_shared<F>(std::move(cb))) {}
 
     template <typename R>
     void operator()(R&& r)

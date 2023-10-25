@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <list>
 #include <memory>
 #include <optional>
 #include <regex>
@@ -21,7 +22,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include <list>
 
 const constexpr char* jsonStore = "/var/configuration/flattened.json";
 const constexpr char* inventoryPath = "/xyz/openbmc_project/inventory";

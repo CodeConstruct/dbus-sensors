@@ -9,8 +9,9 @@
 class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 {
   public:
-    NVMeMi(boost::asio::io_context& io, std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
-           int addr, bool singleThreadMode = false,
+    NVMeMi(boost::asio::io_context& io,
+           std::shared_ptr<sdbusplus::asio::connection> conn, int bus, int addr,
+           bool singleThreadMode = false,
            PowerState readState = PowerState::always);
     ~NVMeMi() override;
 
@@ -43,8 +44,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         override;
 
     void adminFwDownload(nvme_mi_ctrl_t ctrl, std::string firmwarefile,
-        std::function<void(const std::error_code&, nvme_status_field)>&& cb)
-        override;
+                         std::function<void(const std::error_code&,
+                                            nvme_status_field)>&& cb) override;
 
     void adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
                    std::span<uint8_t> data, unsigned int timeout_ms,
@@ -165,9 +166,10 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     std::error_code try_post(std::function<void(void)>&& func);
 
-    void adminFwDownloadChunk(nvme_mi_ctrl_t ctrl, std::string firmwarefile, size_t size,
-                              size_t offset, int attempt_count,
-                              std::function<void(const std::error_code&, nvme_status_field)>&& cb);
+    void adminFwDownloadChunk(
+        nvme_mi_ctrl_t ctrl, std::string firmwarefile, size_t size,
+        size_t offset, int attempt_count,
+        std::function<void(const std::error_code&, nvme_status_field)>&& cb);
 
     void getTelemetryLogChuck(
         nvme_mi_ctrl_t ctrl, bool host, uint64_t offset,

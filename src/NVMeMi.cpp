@@ -18,8 +18,8 @@ nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
 constexpr size_t maxNVMeMILength = 4096;
 constexpr int tcgDefaultTimeoutMS = 20 * 1000;
-constexpr int namespaceDefaultTimeoutMS = 20*1000;
-constexpr int sanitizeDefaultTimeoutMS = 20*1000;
+constexpr int namespaceDefaultTimeoutMS = 20 * 1000;
+constexpr int sanitizeDefaultTimeoutMS = 20 * 1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
                std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
@@ -618,9 +618,9 @@ void NVMeMi::getTelemetryLogChuck(
         {
             boost::asio::post(
                 self->io, [cb{std::move(cb)}, data{std::move(data)}]() mutable {
-                std::span<uint8_t> span{data.data(), data.size()};
-                cb({}, span);
-            });
+                    std::span<uint8_t> span{data.data(), data.size()};
+                    cb({}, span);
+                });
             return;
         }
 
@@ -862,8 +862,8 @@ void NVMeMi::adminGetLogPage(
 
             if (!logHandler)
             {
-                logHandler = [cb{std::move(cb)},
-                              data{std::move(data)}]() mutable {
+                logHandler =
+                    [cb{std::move(cb)}, data{std::move(data)}]() mutable {
                     std::span<uint8_t> span{data.data(), data.size()};
                     cb({}, span);
                 };
@@ -1166,9 +1166,9 @@ void NVMeMi::adminSecuritySend(
     std::span<uint8_t> data,
     std::function<void(const std::error_code&, int nvme_status)>&& cb)
 {
-    std::error_code post_err =
-        try_post([self{shared_from_this()}, ctrl, proto, proto_specific, data,
-                  cb{std::move(cb)}]() {
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, proto, proto_specific, data,
+         cb{std::move(cb)}]() {
         struct nvme_security_send_args args;
         memset(&args, 0x0, sizeof(args));
         args.secp = proto;
@@ -1210,9 +1210,9 @@ void NVMeMi::adminSecurityReceive(
         return;
     }
 
-    std::error_code post_err =
-        try_post([self{shared_from_this()}, ctrl, proto, proto_specific,
-                  transfer_length, cb{std::move(cb)}]() {
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, proto, proto_specific, transfer_length,
+         cb{std::move(cb)}]() {
         std::vector<uint8_t> data(transfer_length);
 
         struct nvme_security_receive_args args;
@@ -1262,20 +1262,20 @@ void NVMeMi::adminSecurityReceive(
 
 void NVMeMi::adminNonDataCmd(
     nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
-    uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
-    uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
+    uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
+    uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
     std::function<void(const std::error_code&, int nvme_status,
                        uint32_t comption_dw0)>&& cb)
 {
-    std::error_code post_err =
-        try_post([self{shared_from_this()}, ctrl, opcode, cdw1, cdw2, cdw3,
-             cdw10, cdw11, cdw12, cdw13, cdw14, cdw15, cb{std::move(cb)}]() {
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, opcode, cdw1, cdw2, cdw3, cdw10, cdw11,
+         cdw12, cdw13, cdw14, cdw15, cb{std::move(cb)}]() {
         uint32_t comption_dw0 = 0;
         int nvme_status = nvme_mi_admin_admin_passthru(
             ctrl, opcode, 0, 0, cdw1, cdw2, cdw3, cdw10, cdw11, cdw12, cdw13,
-            cdw14, cdw15, 0, nullptr, 0, nullptr, 10*1000, &comption_dw0);
-        self->io.post(
-            [cb{std::move(cb)}, nvme_errno{errno}, nvme_status, comption_dw0]() mutable {
+            cdw14, cdw15, 0, nullptr, 0, nullptr, 10 * 1000, &comption_dw0);
+        self->io.post([cb{std::move(cb)}, nvme_errno{errno}, nvme_status,
+                       comption_dw0]() mutable {
             auto err = std::make_error_code(static_cast<std::errc>(nvme_errno));
             cb(err, nvme_status, comption_dw0);
         });
@@ -1284,8 +1284,7 @@ void NVMeMi::adminNonDataCmd(
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
-                  << "adminNonDataCmd post failed: " << post_err
-                  << std::endl;
+                  << "adminNonDataCmd post failed: " << post_err << std::endl;
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, 0); });
     }
 }
@@ -1436,7 +1435,6 @@ void NVMeMi::adminDeleteNamespace(
 {
     std::error_code post_err = try_post(
         [self{shared_from_this()}, ctrl, nsid, cb{std::move(cb)}]() {
-
         unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
         nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
         int status = nvme_mi_admin_ns_mgmt_delete(ctrl, nsid);
@@ -1473,8 +1471,8 @@ void NVMeMi::adminListNamespaces(
             {
                 start = ns.back() + 1;
             }
-            status =
-                nvme_mi_admin_identify_allocated_ns_list(ctrl, start, &list);
+            status = nvme_mi_admin_identify_allocated_ns_list(ctrl, start,
+                                                              &list);
             nvme_errno = errno;
             if (status != 0)
             {
@@ -1556,25 +1554,25 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
                            uint32_t pattern, bool invert_pattern,
                            std::function<void(nvme_ex_ptr ex)>&& cb)
 {
-    std::error_code post_err =
-        try_post([self{shared_from_this()}, ctrl, sanact, passes, pattern,
-                  invert_pattern, cb{std::move(cb)}]() {
-            struct nvme_sanitize_nvm_args args;
-            memset(&args, 0x0, sizeof(args));
-            args.args_size = sizeof(args);
-            args.sanact = sanact;
-            args.owpass = passes;
-            args.oipbp = invert_pattern;
+    std::error_code post_err = try_post(
+        [self{shared_from_this()}, ctrl, sanact, passes, pattern,
+         invert_pattern, cb{std::move(cb)}]() {
+        struct nvme_sanitize_nvm_args args;
+        memset(&args, 0x0, sizeof(args));
+        args.args_size = sizeof(args);
+        args.sanact = sanact;
+        args.owpass = passes;
+        args.oipbp = invert_pattern;
 
-            unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
-            nvme_mi_ep_set_timeout(self->nvmeEP, sanitizeDefaultTimeoutMS);
-            int status = nvme_mi_admin_sanitize_nvm(ctrl, &args);
-            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
-            printf("san status %d errno %d\n", status, errno);
+        unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+        nvme_mi_ep_set_timeout(self->nvmeEP, sanitizeDefaultTimeoutMS);
+        int status = nvme_mi_admin_sanitize_nvm(ctrl, &args);
+        nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
+        printf("san status %d errno %d\n", status, errno);
 
-            auto ex = makeLibNVMeError(errno, status, "adminSanitize");
-            self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
-        });
+        auto ex = makeLibNVMeError(errno, status, "adminSanitize");
+        self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
+    });
     if (post_err)
     {
         auto ex = makeLibNVMeError("post failed");

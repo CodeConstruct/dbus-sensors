@@ -163,6 +163,7 @@ class NVMeSubsystem :
     unsigned UnavailableCount = 0;
     static constexpr unsigned UnavailableMaxCount = 60;
 
-    // process Secondary controller and start controllers and the associated Plugin
+    // process Secondary controller and start controllers and the associated
+    // Plugin
     void processSecondaryControllerList(nvme_secondary_ctrl_list* secCntlrList);
 };

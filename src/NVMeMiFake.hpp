@@ -26,7 +26,6 @@ class NVMeMiFake :
     NVMeMiFake(boost::asio::io_context& io) :
         io(io), valid(true) /*, worker(workerIO.get_executor())*/
     {
-
         // start worker thread
         workerStop = false;
         thread = std::thread([&io = workerIO, &stop = workerStop,
@@ -112,7 +111,6 @@ class NVMeMiFake :
     {
         if (workerStop)
         {
-
             std::cerr << "worker thread for nvme endpoint is stopped"
                       << std::endl;
 
@@ -294,7 +292,6 @@ class NVMeMiFake :
                 int rc = 1;
                 if (rc < 0)
                 {
-
                     std::cerr << "fail to subsystem_health_status_poll: "
                               << std::strerror(errno) << std::endl;
                     self->io.post([cb{std::move(cb)}]() {

@@ -119,7 +119,8 @@ NVMeSubsystem::~NVMeSubsystem()
     objServer.remove_interface(assocIntf);
 }
 
-void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* secCntlrList)
+void NVMeSubsystem::processSecondaryControllerList(
+    nvme_secondary_ctrl_list* secCntlrList)
 {
     auto findPrimary = controllers.begin();
     int secCntlrCount = 0;
@@ -131,7 +132,8 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
         if (findPrimary == controllers.end())
         {
             std::cerr << "fail to match primary controller from "
-                         "identify sencondary cntrl list" << std::endl;
+                         "identify sencondary cntrl list"
+                      << std::endl;
             status = Status::Stop;
             markFunctional(false);
             markAvailable(false);
@@ -187,7 +189,7 @@ void NVMeSubsystem::processSecondaryControllerList(nvme_secondary_ctrl_list* sec
         plugin->start();
     }
     status = Status::Start;
-    
+
     fillDrive();
 
     // TODO: may need to wait for this to complete?
@@ -350,7 +352,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     return;
                 }
                 self->processSecondaryControllerList(listHdr);
-            });
+                });
         });
     }
 }
@@ -1025,7 +1027,6 @@ void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
 
 void NVMeSubsystem::querySupportedFormats()
 {
-
     nvme_mi_ctrl_t ctrl = primaryController->getMiCtrl();
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
     intf->adminIdentify(

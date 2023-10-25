@@ -18,10 +18,10 @@
 
 #include "dbus-sensor_config.h"
 
+#include "DeviceMgmt.hpp"
+
 #include <sys/random.h>
 #include <systemd/sd-id128.h>
-
-#include "DeviceMgmt.hpp"
 
 #include <boost/container/flat_map.hpp>
 #include <sdbusplus/asio/connection.hpp>
@@ -460,7 +460,8 @@ std::unique_ptr<PowerCallbackEntry> setupPowerMatchCallback(
     static boost::asio::steady_timer timer(conn->get_io_context());
     static boost::asio::steady_timer timerChassisOn(conn->get_io_context());
 
-    auto entry =  std::make_unique<PowerCallbackEntry>(std::move(hostStatusCallback));
+    auto entry =
+        std::make_unique<PowerCallbackEntry>(std::move(hostStatusCallback));
 
     // create a match for powergood changes, first time do a method call to
     // cache the correct value

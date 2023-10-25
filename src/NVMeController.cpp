@@ -59,7 +59,7 @@ void NVMeControllerEnabled::init()
         return selfWeak.lock()->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2,
                                                       cdw3, cdw10, cdw11, cdw12,
                                                       cdw13, cdw14, cdw15);
-    });
+        });
     passthruInterface->initialize();
 
     securityInterface = objServer.add_interface(
@@ -337,8 +337,8 @@ void NVMeControllerEnabled::firmwareCommitAsync(uint8_t commitAction,
         });
 }
 
-NVMeAdmin::FwDownloadStatus
-    NVMeControllerEnabled::firmwareDownloadStatus(NVMeAdmin::FwDownloadStatus status)
+NVMeAdmin::FwDownloadStatus NVMeControllerEnabled::firmwareDownloadStatus(
+    NVMeAdmin::FwDownloadStatus status)
 {
     auto downloadStatus = this->NVMeAdmin::firmwareDownloadStatus();
     // The function is only allowed to reset the status back to ready
@@ -367,11 +367,12 @@ void NVMeControllerEnabled::firmwareDownloadAsync(std::string pathToImage)
                                        nvme_status_field status) {
             if (ec || status != NVME_SC_SUCCESS)
             {
-                self->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::Failed);
+                self->NVMeAdmin::firmwareDownloadStatus(
+                    FwDownloadStatus::Failed);
                 return;
             }
             self->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::Success);
-        });
+            });
     }
     else
     {
@@ -497,7 +498,7 @@ std::tuple<uint32_t, uint32_t, uint32_t>
                                   uint32_t completion_dw0) mutable {
             h(std::make_tuple(err, nvme_status, completion_dw0));
         });
-    },
+            },
             yield);
 
     std::cerr << "nvme_status:" << nvme_status << ", dw0:" << completion_dw0

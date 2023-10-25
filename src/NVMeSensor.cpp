@@ -32,7 +32,6 @@ NVMeSensor::NVMeSensor(sdbusplus::asio::object_server& objectServer,
            PowerState::on),
     objServer(objectServer)
 {
-
     sensorInterface = objectServer.add_interface(
         "/xyz/openbmc_project/sensors/temperature/" + name,
         "xyz.openbmc_project.Sensor.Value");

@@ -73,7 +73,7 @@ class NVMeMiMock :
     MOCK_METHOD(int, getEID, (), (const override));
     MOCK_METHOD(void, miSubsystemHealthStatusPoll,
                 (std::function<void(const std::error_code&,
-                                    nvme_mi_nvm_ss_health_status*)> &&),
+                                    nvme_mi_nvm_ss_health_status*)>&&),
                 (override));
     MOCK_METHOD(void, miScanCtrl,
                 (std::function<void(const std::error_code&,
@@ -221,7 +221,6 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
  */
 TEST_F(NVMeTest, TestDriveFunctional)
 {
-
     using ::testing::AtLeast;
     boost::asio::steady_timer timer(io);
 

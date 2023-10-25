@@ -1,130 +1,130 @@
 description: >
-  NVMe MI Admin inteface for vendor commands
+    NVMe MI Admin inteface for vendor commands
 
 properties:
-  - name: FirmwareCommitStatus
-    type: enum[self.FwCommitStatus]
-    flags:
-      - emits_change
-    description: >
-      status for FirmwareCommitAsync
-  - name: FirmwareDownloadStatus
-    type: enum[self.FwDownloadStatus]
-    flags:
-      - emits_change
-    description: >
-      status for FirmwareDownloadAsync
+    - name: FirmwareCommitStatus
+      type: enum[self.FwCommitStatus]
+      flags:
+          - emits_change
+      description: >
+          status for FirmwareCommitAsync
+    - name: FirmwareDownloadStatus
+      type: enum[self.FwDownloadStatus]
+      flags:
+          - emits_change
+      description: >
+          status for FirmwareDownloadAsync
 
 methods:
-  - name: Identify
-    description: >
-      Send Identify command to NVMe device
-    parameters:
-      - name: CNS
-        type: byte
-        description: >
-          Controller or Namespace Structure
-      - name: NSID
-        type: uint32
-        description: >
-          Namespace Identifier
-      - name: CNTID
-        type: uint16
-        description: >
-          Controller Identifier
-    returns:
-      - name: Data
-        type: unixfd
-        description: >
-          Identify Data
-    errors:
-      - xyz.openbmc_project.Common.File.Error.Open
-  - name: GetLogPage
-    description: >
-      Send GetLogPage command to NVMe device
-    parameters:
-      - name: LID
-        type: byte
-        description: >
-          Log Page Identifier
-      - name: NSID
-        type: uint32
-        description: >
-          Namespace Identifier
-      - name: LSP
-        type: byte
-        description: >
-          Log Specific Field
-      - name: LSI
-        type: uint16
-        description: >
-          Log Specific Identifier
-    returns:
-      - name: Log
-        type: unixfd
-        description: >
-          Returned Log Page
-    errors:
-      - xyz.openbmc_project.Common.File.Error.Open
-      - xyz.openbmc_project.Common.Error.InvalidArgument
-  - name: FirmwareCommitAsync
-    description: >
-      Send Firmware Commit command to NVMe device
-    parameters:
-      - name: CommitAction
-        type: byte
-        description: >
-          Commit Action defined by NVMe base spec (Figure 175 of rev 1.4)
-      - name: FirmwareSlot
-        type: byte
-        description: >
-          Firmware Slot
-      - name: BPID
-        type: boolean
-        description: >
-          Boot Partition ID
-  - name: FirmwareDownloadAsync
-    description: >
-      Send Firmware Download command to NVMe device
-    parameters:
-      - name: PathToImage
-        type: string
-        description: >
-          Path to the firmware Image
+    - name: Identify
+      description: >
+          Send Identify command to NVMe device
+      parameters:
+          - name: CNS
+            type: byte
+            description: >
+                Controller or Namespace Structure
+          - name: NSID
+            type: uint32
+            description: >
+                Namespace Identifier
+          - name: CNTID
+            type: uint16
+            description: >
+                Controller Identifier
+      returns:
+          - name: Data
+            type: unixfd
+            description: >
+                Identify Data
+      errors:
+          - xyz.openbmc_project.Common.File.Error.Open
+    - name: GetLogPage
+      description: >
+          Send GetLogPage command to NVMe device
+      parameters:
+          - name: LID
+            type: byte
+            description: >
+                Log Page Identifier
+          - name: NSID
+            type: uint32
+            description: >
+                Namespace Identifier
+          - name: LSP
+            type: byte
+            description: >
+                Log Specific Field
+          - name: LSI
+            type: uint16
+            description: >
+                Log Specific Identifier
+      returns:
+          - name: Log
+            type: unixfd
+            description: >
+                Returned Log Page
+      errors:
+          - xyz.openbmc_project.Common.File.Error.Open
+          - xyz.openbmc_project.Common.Error.InvalidArgument
+    - name: FirmwareCommitAsync
+      description: >
+          Send Firmware Commit command to NVMe device
+      parameters:
+          - name: CommitAction
+            type: byte
+            description: >
+                Commit Action defined by NVMe base spec (Figure 175 of rev 1.4)
+          - name: FirmwareSlot
+            type: byte
+            description: >
+                Firmware Slot
+          - name: BPID
+            type: boolean
+            description: >
+                Boot Partition ID
+    - name: FirmwareDownloadAsync
+      description: >
+          Send Firmware Download command to NVMe device
+      parameters:
+          - name: PathToImage
+            type: string
+            description: >
+                Path to the firmware Image
 
 enumerations:
-  - name: FwCommitStatus
-    description: >
-      The status of firmware download status through nvme daemon
-    values:
-      - name: 'Ready'
-        description: >
-          Ready
-      - name: 'InProgress'
-        description: >
-          In Progress
-      - name: 'Failed'
-        description: >
-          Failed
-      - name: 'RequireReset'
-        description: >
-          Request Reset
-      - name: 'Success'
-        description: >
-          Success
-  - name: FwDownloadStatus
-    description: >
-      The status of firmware download status through nvme daemon
-    values:
-      - name: 'Ready'
-        description: >
-          Ready
-      - name: 'InProgress'
-        description: >
-          In Progress
-      - name: 'Failed'
-        description: >
-          Failed
-      - name: 'Success'
-        description: >
-          Success
+    - name: FwCommitStatus
+      description: >
+          The status of firmware download status through nvme daemon
+      values:
+          - name: "Ready"
+            description: >
+                Ready
+          - name: "InProgress"
+            description: >
+                In Progress
+          - name: "Failed"
+            description: >
+                Failed
+          - name: "RequireReset"
+            description: >
+                Request Reset
+          - name: "Success"
+            description: >
+                Success
+    - name: FwDownloadStatus
+      description: >
+          The status of firmware download status through nvme daemon
+      values:
+          - name: "Ready"
+            description: >
+                Ready
+          - name: "InProgress"
+            description: >
+                In Progress
+          - name: "Failed"
+            description: >
+                Failed
+          - name: "Success"
+            description: >
+                Success

@@ -124,7 +124,6 @@ static void handleConfigurations(
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
     const ManagedObjectType& nvmeConfigurations)
 {
-
     /* We perform two iterations for configurations here. The first iteration is
      * to set up NVMeIntf. The second iter is to setup NVMe subsystem.
      *
@@ -150,7 +149,7 @@ static void handleConfigurations(
         std::optional<int> address = extractAddress(interfacePath,
                                                     sensorConfig);
         std::optional<std::string> sensorName = extractName(interfacePath,
-                                                                  sensorConfig);
+                                                            sensorConfig);
         std::optional<std::string> nvmeProtocol = extractProtocol(interfacePath,
                                                                   sensorConfig);
 
@@ -195,8 +194,8 @@ static void handleConfigurations(
                 address.emplace(0x1d);
             }
 
-            PowerState powerState =
-                extractPowerState(interfacePath, sensorConfig);
+            PowerState powerState = extractPowerState(interfacePath,
+                                                      sensorConfig);
 
             try
             {
@@ -228,8 +227,8 @@ static void handleConfigurations(
 
         const SensorBaseConfigMap& sensorConfig = sensorBase->second;
 
-        std::optional<std::string> sensorName =
-            extractName(interfacePath, sensorConfig);
+        std::optional<std::string> sensorName = extractName(interfacePath,
+                                                            sensorConfig);
 
         auto find = nvmeInterfaces.find(interfacePath);
         if (find == nvmeInterfaces.end())
