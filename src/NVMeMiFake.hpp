@@ -135,6 +135,12 @@ class NVMeMiFake :
         });
     }
 
+    bool flushOperations(std::function<void()>&& cb) override
+    {
+        post([self{shared_from_this()}, cb{std::move(cb)}]() { self->io.post(cb); });
+        return true;
+    }
+
     void adminIdentify(
         nvme_mi_ctrl_t, nvme_identify_cns cns, uint32_t, uint16_t,
         std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb) override

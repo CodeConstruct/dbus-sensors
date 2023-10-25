@@ -404,6 +404,23 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
     }
 }
 
+bool NVMeMi::flushOperations(std::function<void()>&& cb)
+{
+    try
+    {
+        post([self{shared_from_this()}, cb{std::move(cb)}]() {
+            self->io.post(cb);
+        });
+
+        return true;
+    }
+    catch (const std::runtime_error& e)
+    {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 void NVMeMi::adminIdentify(
     nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid, uint16_t cntid,
     std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb)
