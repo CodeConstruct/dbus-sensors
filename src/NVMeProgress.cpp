@@ -33,6 +33,11 @@ void NVMeProgress::fail()
     status(OperationStatus::Failed);
 }
 
+void NVMeProgress::abort()
+{
+    status(OperationStatus::Aborted);
+}
+
 NVMeCreateVolumeProgress::NVMeCreateVolumeProgress(
     std::shared_ptr<sdbusplus::asio::connection> conn,
     const std::string& path) :

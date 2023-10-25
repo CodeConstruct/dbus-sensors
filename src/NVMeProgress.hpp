@@ -34,6 +34,7 @@ class NVMeProgress :
 
     void complete();
     void fail();
+    void abort();
 };
 
 class NVMeCreateVolumeProgress : public NVMeProgress
