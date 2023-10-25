@@ -177,6 +177,12 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
                                                               uint8_t lsp,
                                                               uint16_t lsi)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     std::array<int, 2> pipe;
     if (::pipe(pipe.data()) < 0)
     {
@@ -261,6 +267,12 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
 sdbusplus::message::unix_fd
     NVMeControllerEnabled::identify(uint8_t cns, uint32_t nsid, uint16_t cntid)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     std::array<int, 2> pipe;
     if (::pipe(pipe.data()) < 0)
     {
@@ -313,6 +325,13 @@ void NVMeControllerEnabled::firmwareCommitAsync(uint8_t commitAction,
     {
         throw sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed();
     }
+
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     this->NVMeAdmin::firmwareCommitStatus(FwCommitStatus::InProgress);
     nvmeIntf->adminFwCommit(
         nvmeCtrl, static_cast<nvme_fw_commit_ca>(commitAction & 0b111),
@@ -430,6 +449,12 @@ void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
                                                uint16_t proto_specific,
                                                std::span<uint8_t> data)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     using callback_t = void(std::tuple<std::error_code, int>);
     auto [err, nvme_status] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
@@ -453,6 +478,12 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
     boost::asio::yield_context yield, uint8_t proto, uint16_t proto_specific,
     uint32_t transfer_length)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     using callback_t =
         void(std::tuple<std::error_code, int, std::vector<uint8_t>>);
     auto [err, nvme_status, data] =
@@ -528,6 +559,12 @@ void NVMeControllerEnabled::attachVolume(
     boost::asio::yield_context yield,
     const sdbusplus::message::object_path& volumePath)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     uint32_t nsid;
     if (auto s = subsys.lock())
     {
@@ -561,17 +598,26 @@ void NVMeControllerEnabled::attachVolume(
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status);
 
-    if (auto s = subsys.lock())
+    if (!disabled())
     {
-        s->attachCtrlVolume(getCntrlId(), nsid);
+        if (auto s = subsys.lock())
+        {
+            s->attachCtrlVolume(getCntrlId(), nsid);
+        }
+        updateAssociation();
     }
-    updateAssociation();
 }
 
 void NVMeControllerEnabled::detachVolume(
     boost::asio::yield_context yield,
     const sdbusplus::message::object_path& volumePath)
 {
+    if (disabled())
+    {
+        std::cerr << "Controller has been disabled" << std::endl;
+        throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+    }
+
     uint32_t nsid;
     if (auto s = subsys.lock())
     {
@@ -605,9 +651,12 @@ void NVMeControllerEnabled::detachVolume(
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status);
 
-    if (auto s = subsys.lock())
+    if (!disabled())
     {
-        s->detachCtrlVolume(getCntrlId(), nsid);
+        if (auto s = subsys.lock())
+        {
+            s->detachCtrlVolume(getCntrlId(), nsid);
+        }
+        updateAssociation();
     }
-    updateAssociation();
 }
