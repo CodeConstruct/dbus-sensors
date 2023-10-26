@@ -1,0 +1,39 @@
+From 5030b415af1e5f846fa4e870096eb2b8f3ef1ade Mon Sep 17 00:00:00 2001
+From: Hao Jiang <jianghao@google.com>
+Date: Thu, 26 Oct 2023 12:57:14 -0700
+Subject: [PATCH] Remove run-ci
+
+remove the script so that we can patch pdi in CI docker.
+
+Signed-off-by: Hao Jiang <jianghao@google.com>
+Change-Id: Iccff47fa5a6bb0256c9cead3c49e426eb8a5c23c
+---
+ gen/run-ci | 16 ----------------
+ 1 file changed, 16 deletions(-)
+ delete mode 100755 gen/run-ci
+
+diff --git a/gen/run-ci b/gen/run-ci
+deleted file mode 100755
+index dba8109..0000000
+--- a/gen/run-ci
++++ /dev/null
+@@ -1,16 +0,0 @@
+-#!/bin/bash
+-cd "$(dirname "$0")" || exit
+-find . -mindepth 1 -maxdepth 1 -type d -exec rm -r {} \;
+-./regenerate-meson || exit
+-rc=0
+-git --no-pager diff --exit-code -- . || rc=$?
+-untracked="$(git ls-files --others --exclude-standard -- .)" || rc=$?
+-if [ -n "$untracked" ]; then
+-    echo "Untracked files:" >&2
+-    echo "$untracked" >&2
+-    rc=1
+-fi
+-if ((rc != 0)); then
+-    echo "Generated meson files differ from expected values" >&2
+-    exit 1
+-fi
+-- 
+2.42.0.820.g83a721a137-goog
+
