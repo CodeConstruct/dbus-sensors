@@ -97,6 +97,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                        uint8_t passes, uint32_t pattern, bool invert_pattern,
                        std::function<void(nvme_ex_ptr ex)>&& cb) override;
 
+    void start() override;
+
   private:
     // the transfer size for nvme mi messages.
     // define in github.com/linux-nvme/libnvme/blob/master/src/nvme/mi.c
@@ -121,6 +123,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     int nid;
     uint8_t eid;
+    uint16_t mtu;
     std::string mctpPath;
 
     std::mutex mctpMtx;
@@ -143,6 +146,23 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         void post(std::function<void(void)>&& func);
     };
 
+    // A state machine to represent the current status of the MCTP connection.
+    // In Reset state, the MCTP endpoint (EP) is not setup with the device. In
+    // event of successful setup and opening of EP, the status will change to
+    // Initiated. The status will change to Connected, once the MTU of local and
+    // device side MTU and frequency is changed. In an event of connection EP
+    // closure, the status will move back to Reset.
+    enum class Status
+    {
+        Reset,
+        Initiated,
+        Connected,
+    };
+
+    bool startLoopRunning;
+
+    Status mctpStatus;
+
     // A map from root bus number to the Worker
     // This map means to reuse the same worker for all NVMe EP under the same
     // I2C root bus. There is no real physical concurrency among the i2c/mctp
@@ -154,15 +174,27 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     std::shared_ptr<Worker> worker;
     void post(std::function<void(void)>&& func);
 
-    void initMCTP();
+    void stop();
 
-    void closeMCTP();
+    void
+        miConfigureRemoteMCTP(uint8_t port, uint16_t mtu,
+                              uint8_t max_supported_freq,
+                              std::function<void(const std::error_code&)>&& cb);
+
+    void miConfigureSMBusFrequency(
+        uint8_t port_id, uint8_t max_supported_freq,
+        std::function<void(const std::error_code&)>&& cb);
+
+    void miSetMCTPConfiguration(
+        std::function<void(const std::error_code&)>&& cb);
+
+    int configureLocalRouteMtu();
 
     bool isMCTPconnect() const;
 
     bool readingStateGood() const
     {
-        return isMCTPconnect() && ::readingStateGood(readState);
+        return ::readingStateGood(readState);
     }
 
     std::error_code try_post(std::function<void(void)>&& func);

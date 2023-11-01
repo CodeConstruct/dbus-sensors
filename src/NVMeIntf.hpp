@@ -171,6 +171,8 @@ class NVMeMiIntf
                                       const std::vector<nvme_mi_ctrl_t>&)>
                        cb) = 0;
 
+    virtual void start() = 0;
+
     virtual ~NVMeMiIntf() = default;
 
     virtual void adminIdentify(

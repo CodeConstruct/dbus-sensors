@@ -208,6 +208,9 @@ static void handleConfigurations(
                     io, dbusConnection, *busNumber, *address, singleThreadMode,
                     powerState);
 
+                auto nvme = std::get<std::shared_ptr<NVMeMiIntf>>(
+                    nvmeMi.getInferface());
+                nvme->start();
                 nvmeInterfaces.emplace(interfacePath, nvmeMi);
             }
             catch (std::exception& ex)
