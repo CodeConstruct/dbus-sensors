@@ -3,6 +3,7 @@
 
 #include <dlfcn.h>
 
+#include <nlohmann/json.hpp>
 #include <sdbusplus/asio/connection.hpp>
 
 #include <gmock/gmock.h>
@@ -275,7 +276,10 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // not storage controller should be listed.
-                    EXPECT_EQ(result.size(), 0);
+                    nlohmann::json j(result);
+                    EXPECT_EQ(result.size(), 0)
+                        << "The following interfaces remain after STOP: \n"
+                        << j.dump(2) << std::endl;
                     io.stop();
                 },
                     "xyz.openbmc_project.ObjectMapper",
@@ -339,7 +343,10 @@ TEST_F(NVMeTest, TestDriveFunctional)
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // no storage controller should be listed.
-                    EXPECT_EQ(result.size(), 0);
+                    nlohmann::json j(result);
+                    EXPECT_EQ(result.size(), 0)
+                        << "The following interfaces remain after unfunctional: \n"
+                        << j.dump(2) << std::endl;
 
                     // restart sending DF = 1
                     ON_CALL(mock, miSubsystemHealthStatusPoll)
@@ -429,7 +436,10 @@ TEST_F(NVMeTest, TestDriveAbsent)
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // no storage controller should be listed.
-                    EXPECT_EQ(result.size(), 0);
+                    nlohmann::json j(result);
+                    EXPECT_EQ(result.size(), 0)
+                        << "The following interfaces remain after absent: \n"
+                        << j.dump(2) << std::endl;
 
                     // restart sending normal polling result
                     ON_CALL(mock, miSubsystemHealthStatusPoll)
