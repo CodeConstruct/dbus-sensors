@@ -60,14 +60,16 @@ class NVMeSubsystem :
 
     const std::string path;
 
-  private:
+  public:
     NVMeSubsystem(boost::asio::io_context& io,
                   sdbusplus::asio::object_server& objServer,
                   std::shared_ptr<sdbusplus::asio::connection> conn,
                   const std::string& path, const std::string& name,
                   const SensorData& configData, NVMeIntf intf);
+
     void init();
 
+  private:
     friend class NVMePlugin;
     boost::asio::io_context& io;
     sdbusplus::asio::object_server& objServer;

@@ -11,7 +11,7 @@ class NVMeMiMock :
     public std::enable_shared_from_this<NVMeMiMock>
 {
   public:
-    NVMeMiMock(boost::asio::io_service& io) :
+    NVMeMiMock(boost::asio::io_context& io) :
         fake(std::move(std::make_shared<NVMeMiFake>(io)))
     {
         ON_CALL(*this, getNID).WillByDefault([]() { return 0; });
@@ -31,10 +31,10 @@ class NVMeMiMock :
                         cb) { return fake->miScanCtrl(std::move(cb)); });
         ON_CALL(*this, adminIdentify)
             .WillByDefault(
-                [this](nvme_mi_ctrl_t ctrl, nvme_identify_cns cns,
-                       uint32_t nsid, uint16_t cntid,
-                       std::function<void(const std::error_code&,
-                                          std::span<uint8_t>)>&& cb) {
+                [this](
+                    nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid,
+                    uint16_t cntid,
+                    std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb) {
             return fake->adminIdentify(ctrl, cns, nsid, cntid, std::move(cb));
             });
         ON_CALL(*this, adminGetLogPage)
@@ -79,12 +79,11 @@ class NVMeMiMock :
                 (std::function<void(const std::error_code&,
                                     const std::vector<nvme_mi_ctrl_t>&)>),
                 (override));
-    MOCK_METHOD(
-        void, adminIdentify,
-        (nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid,
-         uint16_t cntid,
-         std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb),
-        (override));
+    MOCK_METHOD(void, adminIdentify,
+                (nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid,
+                 uint16_t cntid,
+                 std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb),
+                (override));
     MOCK_METHOD(
         void, adminGetLogPage,
         (nvme_mi_ctrl_t ctrl, nvme_cmd_get_log_lid lid, uint32_t nsid,
@@ -117,6 +116,51 @@ class NVMeMiMock :
                                     const std::span<uint8_t> data)>&& cb),
                 (override));
 
+    MOCK_METHOD(
+        void, adminFwDownload,
+        (nvme_mi_ctrl_t ctrl, std::string firmwarefile,
+         std::function<void(const std::error_code&, nvme_status_field)>&& cb),
+        (override));
+
+    MOCK_METHOD(void, adminNonDataCmd,
+                (nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1,
+                 uint32_t cdw2, uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
+                 uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
+                 std::function<void(const std::error_code&, int nvme_status,
+                                    uint32_t comption_dw0)>&& cb),
+                (override));
+    MOCK_METHOD(void, createNamespace,
+                (nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
+                 bool metadata_at_end,
+                 std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+                 std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&&
+                     finished_cb),
+                (override));
+
+    MOCK_METHOD(
+        void, adminDeleteNamespace,
+        (nvme_mi_ctrl_t ctrl, uint32_t nsid,
+         std::function<void(const std::error_code&, int nvme_status)>&& cb),
+        (override));
+
+    MOCK_METHOD(
+        void, adminAttachDetachNamespace,
+        (nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
+         std::function<void(const std::error_code&, int nvme_status)>&& cb),
+        (override));
+
+    MOCK_METHOD(
+        void, adminListNamespaces,
+        (nvme_mi_ctrl_t ctrl,
+         std::function<void(nvme_ex_ptr ex, std::vector<uint32_t> ns)>&& cb),
+        (override));
+
+    MOCK_METHOD(void, adminSanitize,
+                (nvme_mi_ctrl_t ctrl, enum nvme_sanitize_sanact sanact,
+                 uint8_t passes, uint32_t pattern, bool invert_pattern,
+                 std::function<void(nvme_ex_ptr ex)>&& cb),
+                (override));
+
     std::shared_ptr<NVMeMiFake> fake;
 };
 
@@ -143,6 +187,7 @@ class NVMeTest : public ::testing::Test
 
     void SetUp() override
     {
+        subsys->init();
         subsys->start();
     }
 
@@ -154,7 +199,7 @@ class NVMeTest : public ::testing::Test
     static constexpr char subsys_path[] =
         "/xyz/openbmc_project/inventory/Test_Chassis/Test_NVMe";
 
-    static boost::asio::io_service io;
+    static boost::asio::io_context io;
     static std::shared_ptr<sdbusplus::asio::connection> system_bus;
     sdbusplus::asio::object_server object_server;
 
@@ -163,7 +208,7 @@ class NVMeTest : public ::testing::Test
     std::shared_ptr<NVMeSubsystem> subsys;
 };
 
-boost::asio::io_service NVMeTest::io;
+boost::asio::io_context NVMeTest::io;
 std::shared_ptr<sdbusplus::asio::connection> NVMeTest::system_bus;
 
 /**

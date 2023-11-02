@@ -137,8 +137,7 @@ class NVMeMiFake :
 
     void adminIdentify(
         nvme_mi_ctrl_t, nvme_identify_cns cns, uint32_t, uint16_t,
-        std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb)
-        override
+        std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb) override
     {
         std::cerr << "identify" << std::endl;
         post([self{shared_from_this()}, cb = std::move(cb), cns]() {
@@ -429,6 +428,76 @@ class NVMeMiFake :
                            const std::span<uint8_t> data)>&& cb) override
     {
         cb(std::make_error_code(std::errc::not_supported), 0, {});
+    }
+
+    void adminFwDownload(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl,
+        [[maybe_unused]] std::string firmwarefile,
+        [[maybe_unused]] std::function<void(const std::error_code&,
+                                            nvme_status_field)>&& cb) override
+    {
+        cb(std::make_error_code(std::errc::not_supported),
+           nvme_status_field::NVME_SC_SUCCESS);
+    }
+
+    void adminNonDataCmd(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint8_t opcode,
+        [[maybe_unused]] uint32_t cdw1, [[maybe_unused]] uint32_t cdw2,
+        [[maybe_unused]] uint32_t cdw3, [[maybe_unused]] uint32_t cdw10,
+        [[maybe_unused]] uint32_t cdw11, [[maybe_unused]] uint32_t cdw12,
+        [[maybe_unused]] uint32_t cdw13, [[maybe_unused]] uint32_t cdw14,
+        [[maybe_unused]] uint32_t cdw15,
+        [[maybe_unused]] std::function<void(
+            const std::error_code&, int nvme_status, uint32_t comption_dw0)>&&
+            cb) override
+    {
+        cb(std::make_error_code(std::errc::not_supported), 0, 0);
+    }
+
+    void createNamespace(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint64_t size,
+        [[maybe_unused]] size_t lba_format,
+        [[maybe_unused]] bool metadata_at_end,
+        [[maybe_unused]] std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+        [[maybe_unused]] std::function<
+            void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finished_cb) override
+    {
+        /* TODO: return not support to the cb/s */
+    }
+
+    void adminDeleteNamespace(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint32_t nsid,
+        [[maybe_unused]] std::function<void(const std::error_code&,
+                                            int nvme_status)>&& cb) override
+    {
+        cb(std::make_error_code(std::errc::not_supported), 0);
+    }
+
+    void adminListNamespaces(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl,
+        [[maybe_unused]] std::function<
+            void(nvme_ex_ptr ex, std::vector<uint32_t> ns)>&& cb) override
+    {
+        /* TODO: return not support to the cb/s */
+    }
+
+    void adminAttachDetachNamespace(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint16_t ctrlid,
+        [[maybe_unused]] uint32_t nsid, [[maybe_unused]] bool attach,
+        [[maybe_unused]] std::function<void(const std::error_code&,
+                                            int nvme_status)>&& cb) override
+    {
+        cb(std::make_error_code(std::errc::not_supported), 0);
+    }
+
+    void adminSanitize(
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl,
+        [[maybe_unused]] enum nvme_sanitize_sanact sanact,
+        [[maybe_unused]] uint8_t passes, [[maybe_unused]] uint32_t pattern,
+        [[maybe_unused]] bool invert_pattern,
+        [[maybe_unused]] std::function<void(nvme_ex_ptr ex)>&& cb) override
+    {
+        /* TODO: return not support to the cb/s */
     }
 
   private:
