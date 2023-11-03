@@ -38,18 +38,28 @@ test(
     )
 )
 
-plugin = shared_library('FakePlugin',
-    '../src/NVMeFakePlugin.cpp',
-    cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
-    dependencies: nvme_plugin_dep,
-    link_args: ['-Wl,--unresolved-symbols=ignore-in-object-files'],
-    implicit_include_directories: false,
-    include_directories: '../src',
-)
+# enable the nvme unit test only for CI docker because the test requires dbus
+if get_option('nvme').enabled() and run_command('/usr/bin/bash', '-c', '[ ! -f /.dockerenv ]').returncode() == 1
 
-plugin_dep = declare_dependency(link_with: plugin)
+    setup = files(
+        'setup.sh'
+    )
+    r = run_command('/usr/bin/bash', setup, capture: true, check: false)
+    message('stdout: \n', r.stdout().strip())
+    message('stderr: \n', r.stderr().strip())
+    assert(r.returncode()==0)
 
-if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMapper').returncode() == 0
+    plugin = shared_library('FakePlugin',
+        '../src/NVMeFakePlugin.cpp',
+        cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
+        dependencies: nvme_plugin_dep,
+        link_args: ['-Wl,--unresolved-symbols=ignore-in-object-files'],
+        implicit_include_directories: false,
+        include_directories: '../src',
+    )
+
+    plugin_dep = declare_dependency(link_with: plugin)
+
     test(
         'test_nvme',
         executable(
@@ -69,6 +79,8 @@ if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMap
             dependencies: [ut_deps_list, nvme_deps, nlohmann_json, plugin_dep],
             implicit_include_directories: false,
             include_directories: '../src',
-        )
+        ),
+        env:'LD_LIBRARY_PATH=/usr/local/lib'
     )
 endif
+
