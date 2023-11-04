@@ -22,7 +22,7 @@ class NVMeMiMock :
                     std::function<void(const std::error_code&,
                                        nvme_mi_nvm_ss_health_status*)>&& cb) {
             return fake->miSubsystemHealthStatusPoll(std::move(cb));
-            });
+        });
         ON_CALL(*this, miScanCtrl)
             .WillByDefault(
                 [this](
@@ -36,7 +36,7 @@ class NVMeMiMock :
                     uint16_t cntid,
                     std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb) {
             return fake->adminIdentify(ctrl, cns, nsid, cntid, std::move(cb));
-            });
+        });
         ON_CALL(*this, adminGetLogPage)
             .WillByDefault(
                 [this](nvme_mi_ctrl_t ctrl, nvme_cmd_get_log_lid lid,
@@ -45,15 +45,14 @@ class NVMeMiMock :
                                           std::span<uint8_t>)>&& cb) {
             return fake->adminGetLogPage(ctrl, lid, nsid, lsp, lsi,
                                          std::move(cb));
-            });
+        });
         ON_CALL(*this, adminFwCommit)
             .WillByDefault([this](nvme_mi_ctrl_t ctrl, nvme_fw_commit_ca action,
                                   uint8_t slot, bool bpid,
                                   std::function<void(const std::error_code&,
                                                      nvme_status_field)>&& cb) {
-                return fake->adminFwCommit(ctrl, action, slot, bpid,
-                                           std::move(cb));
-            });
+            return fake->adminFwCommit(ctrl, action, slot, bpid, std::move(cb));
+        });
         ON_CALL(*this, adminXfer)
             .WillByDefault(
                 [this](
@@ -64,7 +63,7 @@ class NVMeMiMock :
                                        std::span<uint8_t> resp_data)>&& cb) {
             return fake->adminXfer(ctrl, admin_req, data, timeout_ms,
                                    std::move(cb));
-            });
+        });
         ON_CALL(*this, adminSecuritySend).WillByDefault([]() { return; });
         ON_CALL(*this, adminSecurityReceive).WillByDefault([]() { return; });
     }
@@ -242,7 +241,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     // not storage controller should be listed.
                     EXPECT_EQ(result.size(), 0);
                     io.stop();
-                    },
+                },
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -250,7 +249,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-            },
+        },
             "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
@@ -295,7 +294,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                     status.nss = 0;
                     cb({}, &status);
                 });
-                });
+            });
 
             // wait for storage controller destruction.
             timer.expires_after(std::chrono::seconds(2));
@@ -314,7 +313,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                                     nvme_mi_nvm_ss_health_status*)>&& cb) {
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
-                        });
+                    });
                     timer.expires_after(std::chrono::seconds(2));
                     timer.async_wait([&](boost::system::error_code) {
                         system_bus->async_method_call(
@@ -325,7 +324,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
 
                             subsys->stop();
                             io.post([&]() { io.stop(); });
-                            },
+                        },
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
                             "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -334,7 +333,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                                 "xyz.openbmc_project.Inventory."
                                 "Item.StorageController"});
                     });
-                    },
+                },
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -342,7 +341,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-            },
+        },
             "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
@@ -385,7 +384,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                     cb(std::make_error_code(std::errc::no_such_device),
                        nullptr);
                 });
-                });
+            });
 
             // wait for storage controller destruction.
             timer.expires_after(std::chrono::seconds(2));
@@ -404,7 +403,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                                     nvme_mi_nvm_ss_health_status*)>&& cb) {
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
-                        });
+                    });
                     timer.expires_after(std::chrono::seconds(2));
                     timer.async_wait([&](boost::system::error_code) {
                         system_bus->async_method_call(
@@ -415,7 +414,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
 
                             subsys->stop();
                             io.post([&]() { io.stop(); });
-                            },
+                        },
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
                             "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -424,7 +423,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                                 "xyz.openbmc_project.Inventory."
                                 "Item.StorageController"});
                     });
-                    },
+                },
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -432,7 +431,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-            },
+        },
             "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,

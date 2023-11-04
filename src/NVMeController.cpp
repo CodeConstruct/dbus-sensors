@@ -59,7 +59,7 @@ void NVMeControllerEnabled::init()
         return selfWeak.lock()->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2,
                                                       cdw3, cdw10, cdw11, cdw12,
                                                       cdw13, cdw14, cdw15);
-        });
+    });
     passthruInterface->initialize();
 
     securityInterface = objServer.add_interface(
@@ -77,7 +77,7 @@ void NVMeControllerEnabled::init()
         }
         return selfWeak.lock()->securitySendMethod(yield, proto, proto_specific,
                                                    data);
-        });
+    });
     securityInterface->register_method(
         "SecurityReceive",
         [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
@@ -91,7 +91,7 @@ void NVMeControllerEnabled::init()
         }
         return selfWeak.lock()->securityReceiveMethod(
             yield, proto, proto_specific, transfer_length);
-        });
+    });
 
     // StorageController interface is implemented manually to allow
     // async methods
@@ -105,7 +105,7 @@ void NVMeControllerEnabled::init()
         {
             return self->attachVolume(yield, volPath);
         }
-        });
+    });
     ctrlInterface->register_method(
         "DetachVolume",
         [weak{weak_from_this()}](boost::asio::yield_context yield,
@@ -114,7 +114,7 @@ void NVMeControllerEnabled::init()
         {
             return self->detachVolume(yield, volPath);
         }
-        });
+    });
 
     ctrlInterface->initialize();
 
@@ -212,7 +212,7 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
                           << std::strerror(errno) << std::endl;
             };
             close(fd);
-            });
+        });
     }
     // vendor Log IDs
     else if (!plugin.expired())
@@ -334,7 +334,7 @@ void NVMeControllerEnabled::firmwareCommitAsync(uint8_t commitAction,
         }
 
         self->NVMeAdmin::firmwareCommitStatus(FwCommitStatus::Success);
-        });
+    });
 }
 
 NVMeAdmin::FwDownloadStatus NVMeControllerEnabled::firmwareDownloadStatus(
@@ -372,7 +372,7 @@ void NVMeControllerEnabled::firmwareDownloadAsync(std::string pathToImage)
                 return;
             }
             self->NVMeAdmin::firmwareDownloadStatus(FwDownloadStatus::Success);
-            });
+        });
     }
     else
     {
@@ -444,8 +444,8 @@ void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
             ctrl, proto, proto_specific, data,
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
-            });
-            },
+        });
+    },
             yield);
 
     // exception must be thrown outside of the async block
@@ -471,7 +471,7 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
             std::vector<uint8_t> d(data.begin(), data.end());
             h(std::make_tuple(err, nvme_status, d));
         });
-            },
+    },
             yield);
 
     // exception must be thrown outside of the async block
@@ -498,7 +498,7 @@ std::tuple<uint32_t, uint32_t, uint32_t>
                                   uint32_t completion_dw0) mutable {
             h(std::make_tuple(err, nvme_status, completion_dw0));
         });
-            },
+    },
             yield);
 
     std::cerr << "nvme_status:" << nvme_status << ", dw0:" << completion_dw0
@@ -557,8 +557,8 @@ void NVMeControllerEnabled::attachVolume(
             ctrl, ctrlid, nsid, true,
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
-            });
-            },
+        });
+    },
             yield);
 
     // exception must be thrown outside of the async block
@@ -601,8 +601,8 @@ void NVMeControllerEnabled::detachVolume(
             ctrl, ctrlid, nsid, false,
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
-            });
-            },
+        });
+    },
             yield);
 
     // exception must be thrown outside of the async block

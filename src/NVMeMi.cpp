@@ -618,9 +618,9 @@ void NVMeMi::getTelemetryLogChuck(
         {
             boost::asio::post(
                 self->io, [cb{std::move(cb)}, data{std::move(data)}]() mutable {
-                    std::span<uint8_t> span{data.data(), data.size()};
-                    cb({}, span);
-                });
+                std::span<uint8_t> span{data.data(), data.size()};
+                cb({}, span);
+            });
             return;
         }
 
@@ -862,8 +862,8 @@ void NVMeMi::adminGetLogPage(
 
             if (!logHandler)
             {
-                logHandler =
-                    [cb{std::move(cb)}, data{std::move(data)}]() mutable {
+                logHandler = [cb{std::move(cb)},
+                              data{std::move(data)}]() mutable {
                     std::span<uint8_t> span{data.data(), data.size()};
                     cb({}, span);
                 };
@@ -1166,9 +1166,9 @@ void NVMeMi::adminSecuritySend(
     std::span<uint8_t> data,
     std::function<void(const std::error_code&, int nvme_status)>&& cb)
 {
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, proto, proto_specific, data,
-         cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, proto, proto_specific, data,
+                  cb{std::move(cb)}]() {
         struct nvme_security_send_args args;
         memset(&args, 0x0, sizeof(args));
         args.secp = proto;
@@ -1210,9 +1210,9 @@ void NVMeMi::adminSecurityReceive(
         return;
     }
 
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, proto, proto_specific, transfer_length,
-         cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, proto, proto_specific,
+                  transfer_length, cb{std::move(cb)}]() {
         std::vector<uint8_t> data(transfer_length);
 
         struct nvme_security_receive_args args;
@@ -1326,10 +1326,10 @@ void NVMeMi::createNamespace(
     std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finished_cb)
 {
     printf("createns %d\n", (int)gettid());
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, size, lba_format, metadata_at_end,
-         submitted_cb{std::move(submitted_cb)},
-         finished_cb{std::move(finished_cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, size, lba_format,
+                  metadata_at_end, submitted_cb{std::move(submitted_cb)},
+                  finished_cb{std::move(finished_cb)}]() {
         size_t block_size;
 
         try
@@ -1433,8 +1433,8 @@ void NVMeMi::adminDeleteNamespace(
     nvme_mi_ctrl_t ctrl, uint32_t nsid,
     std::function<void(const std::error_code&, int nvme_status)>&& cb)
 {
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, nsid, cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, nsid, cb{std::move(cb)}]() {
         unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
         nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
         int status = nvme_mi_admin_ns_mgmt_delete(ctrl, nsid);
@@ -1456,8 +1456,8 @@ void NVMeMi::adminListNamespaces(
     nvme_mi_ctrl_t ctrl,
     std::function<void(nvme_ex_ptr, std::vector<uint32_t> ns)>&& cb)
 {
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, cb{std::move(cb)}]() {
         int status, nvme_errno;
         std::vector<uint32_t> ns;
         // sanity in case of bad drives, allows for >1million NSes
@@ -1554,9 +1554,9 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
                            uint32_t pattern, bool invert_pattern,
                            std::function<void(nvme_ex_ptr ex)>&& cb)
 {
-    std::error_code post_err = try_post(
-        [self{shared_from_this()}, ctrl, sanact, passes, pattern,
-         invert_pattern, cb{std::move(cb)}]() {
+    std::error_code post_err =
+        try_post([self{shared_from_this()}, ctrl, sanact, passes, pattern,
+                  invert_pattern, cb{std::move(cb)}]() {
         struct nvme_sanitize_nvm_args args;
         memset(&args, 0x0, sizeof(args));
         args.args_size = sizeof(args);

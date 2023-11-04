@@ -140,7 +140,7 @@ void PSUSensor::setupRead(void)
         }
 
         self->handleResponse(ec, bytesRead);
-        });
+    });
 }
 
 void PSUSensor::restartRead(void)

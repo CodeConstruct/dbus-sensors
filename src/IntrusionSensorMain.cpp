@@ -223,8 +223,7 @@ static void getNicNameInfo(
     const std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
 {
     auto getter = std::make_shared<GetSensorConfiguration>(
-        dbusConnection,
-        [](const ManagedObjectType& sensorConfigurations) {
+        dbusConnection, [](const ManagedObjectType& sensorConfigurations) {
         // Get NIC name and save to map
         lanInfoMap.clear();
         for (const auto& [path, cfgData] : sensorConfigurations)
@@ -265,7 +264,7 @@ static void getNicNameInfo(
         {
             std::cerr << "can't find matched NIC name. \n";
         }
-        });
+    });
 
     getter->getConfiguration(
         std::vector<std::string>{nicTypes.begin(), nicTypes.end()});
@@ -445,7 +444,7 @@ static bool initializeLanStatus(
                           << (isLanConnected ? "true" : "false") << "\n";
             }
             lanStatusMap[ethNum] = isLanConnected;
-            },
+        },
             "org.freedesktop.network1",
             "/org/freedesktop/network1/link/_" + pathSuffix,
             "org.freedesktop.DBus.Properties", "Get",
@@ -511,7 +510,7 @@ int main()
                 return;
             }
             getNicNameInfo(systemBus);
-            });
+        });
     }
 
     io.run();

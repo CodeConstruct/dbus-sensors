@@ -923,9 +923,9 @@ void createSensors(
     auto getter = std::make_shared<GetSensorConfiguration>(
         dbusConnection, [&io, &objectServer, &dbusConnection, sensorsChanged](
                             const ManagedObjectType& sensorConfigs) {
-            createSensorsCallback(io, objectServer, dbusConnection,
-                                  sensorConfigs, sensorsChanged);
-        });
+        createSensorsCallback(io, objectServer, dbusConnection, sensorConfigs,
+                              sensorsChanged);
+    });
     std::vector<std::string> types(sensorTypes.size());
     for (const auto& [type, dt] : sensorTypes)
     {

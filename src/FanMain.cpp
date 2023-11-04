@@ -247,7 +247,7 @@ void createRedundancySensor(
                 }
             }
         }
-        },
+    },
         "xyz.openbmc_project.EntityManager", "/xyz/openbmc_project/inventory",
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects");
 }
@@ -560,7 +560,7 @@ void createSensors(
         }
 
         createRedundancySensor(tachSensors, dbusConnection, objectServer);
-        });
+    });
     getter->getConfiguration(
         std::vector<std::string>{sensorTypes.begin(), sensorTypes.end()},
         retries);

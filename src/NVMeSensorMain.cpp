@@ -272,19 +272,19 @@ void createNVMeSubsystems(
     auto getter = std::make_shared<GetSensorConfiguration>(
         dbusConnection, [&io, &objectServer, &dbusConnection](
                             const ManagedObjectType& nvmeConfigurations) {
-            configs = nvmeConfigurations;
-            count--;
-            if (count == 0)
-            {
-                handleConfigurations(io, objectServer, dbusConnection, configs);
-            }
-            else
-            {
-                std::cerr << "more than one `handleConfigurations` has been "
-                             "scheduled, cancel the current one"
-                          << std::endl;
-            }
-        });
+        configs = nvmeConfigurations;
+        count--;
+        if (count == 0)
+        {
+            handleConfigurations(io, objectServer, dbusConnection, configs);
+        }
+        else
+        {
+            std::cerr << "more than one `handleConfigurations` has been "
+                         "scheduled, cancel the current one"
+                      << std::endl;
+        }
+    });
     auto timer = std::make_shared<boost::asio::steady_timer>(
         io, std::chrono::seconds(5));
     timer->async_wait([&io, &objectServer, &dbusConnection,
@@ -388,7 +388,7 @@ int main()
             std::string(inventoryPath) + "/'",
         [](sdbusplus::message_t& msg) {
         interfaceRemoved(msg, nvmeSubsysMap);
-        });
+    });
 
     setupManufacturingModeMatch(*systemBus);
 

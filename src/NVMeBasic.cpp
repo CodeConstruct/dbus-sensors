@@ -225,9 +225,9 @@ NVMeBasicIO::NVMeBasicIO(
     FileHandle streamOut(responsePipe[1]);
     respStream.assign(responsePipe[0]);
 
-    thread = std::jthread(
-        [streamIn{std::move(streamIn)}, streamOut{std::move(streamOut)},
-         procFunc(std::move(procFunc))]() mutable {
+    thread = std::jthread([streamIn{std::move(streamIn)},
+                           streamOut{std::move(streamOut)},
+                           procFunc(std::move(procFunc))]() mutable {
         ssize_t rc = 0;
 
         if ((rc = procFunc(streamIn, streamOut)) < 0)
@@ -271,7 +271,7 @@ void NVMeBasic::getStatus(
         {
             std::cerr << "Got error writing basic query: " << ec << "\n";
         }
-        });
+    });
 
     auto response = std::make_shared<boost::asio::streambuf>();
     response->prepare(1);
@@ -314,7 +314,7 @@ void NVMeBasic::getStatus(
 
         response->prepare(len);
         return len;
-        },
+    },
         [weakSelf{weak_from_this()}, response, cb = std::move(cb)](
             const boost::system::error_code& ec, std::size_t length) mutable {
         if (ec)

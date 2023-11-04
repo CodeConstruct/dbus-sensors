@@ -111,10 +111,10 @@ void NVMeDrive::sanitizePoll()
 
         if (self->eraseInProgress())
         {
-            s->sanitizeStatus(
-                [self](nvme_ex_ptr ex, bool inProgress, bool failed,
-                       bool completed, uint16_t sstat, uint16_t sprog,
-                       uint32_t scdw10) {
+            s->sanitizeStatus([self](nvme_ex_ptr ex, bool inProgress,
+                                     bool failed, bool completed,
+                                     uint16_t sstat, uint16_t sprog,
+                                     uint32_t scdw10) {
                 (void)sstat;
                 (void)sprog;
                 (void)scdw10;

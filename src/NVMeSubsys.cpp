@@ -352,7 +352,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     return;
                 }
                 self->processSecondaryControllerList(listHdr);
-                });
+            });
         });
     }
 }
@@ -659,7 +659,7 @@ sdbusplus::message::object_path
             // The actual nvme_mi_admin_ns_mgmt_create() call is still running
             // in a separate thread. Pass the error status back out.
             h(std::make_tuple(ex));
-            },
+        },
 
             // finished_cb
             [weak, prog_id](nvme_ex_ptr ex, NVMeNSIdentify newns) mutable {
@@ -675,7 +675,7 @@ sdbusplus::message::object_path
             // The NS create has completed (either successfully or not)
             self->createVolumeFinished(prog_id, ex, newns);
         });
-        },
+    },
         yield);
 
     // #3
@@ -803,7 +803,7 @@ void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
                 uint16_t c = ::le16toh(list.identifier[i]);
                 self->attachCtrlVolume(c, nsid);
             }
-            });
+        });
     });
 }
 
@@ -814,38 +814,38 @@ void NVMeSubsystem::updateVolumes()
     intf->adminListNamespaces(
         ctrl, [ctrl, intf, self{shared_from_this()}](
                   nvme_ex_ptr ex, std::vector<uint32_t> ns) mutable {
-            if (ex)
-            {
-                std::cerr << "list namespaces failed: " << ex << "\n";
-                return;
-            }
+        if (ex)
+        {
+            std::cerr << "list namespaces failed: " << ex << "\n";
+            return;
+        }
 
-            std::vector<uint32_t> existing;
-            for (auto& [n, _] : self->volumes)
-            {
-                existing.push_back(n);
-            }
+        std::vector<uint32_t> existing;
+        for (auto& [n, _] : self->volumes)
+        {
+            existing.push_back(n);
+        }
 
-            std::vector<uint32_t> additions;
-            std::vector<uint32_t> deletions;
+        std::vector<uint32_t> additions;
+        std::vector<uint32_t> deletions;
 
-            // namespace lists are ordered
-            std::set_difference(ns.begin(), ns.end(), existing.begin(),
-                                existing.end(), std::back_inserter(additions));
+        // namespace lists are ordered
+        std::set_difference(ns.begin(), ns.end(), existing.begin(),
+                            existing.end(), std::back_inserter(additions));
 
-            std::set_difference(existing.begin(), existing.end(), ns.begin(),
-                                ns.end(), std::back_inserter(deletions));
+        std::set_difference(existing.begin(), existing.end(), ns.begin(),
+                            ns.end(), std::back_inserter(deletions));
 
-            for (auto n : deletions)
-            {
-                self->forgetVolume(self->volumes.find(n)->second);
-            }
+        for (auto n : deletions)
+        {
+            self->forgetVolume(self->volumes.find(n)->second);
+        }
 
-            for (auto n : additions)
-            {
-                self->addIdentifyNamespace(n);
-            }
-        });
+        for (auto n : additions)
+        {
+            self->addIdentifyNamespace(n);
+        }
+    });
 }
 
 void NVMeSubsystem::fillDrive()
@@ -1065,7 +1065,7 @@ void NVMeSubsystem::querySupportedFormats()
                                .relativePerformance = rp});
         }
         self->setSupportedFormats(formats);
-        });
+    });
 }
 
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
@@ -1084,8 +1084,8 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
             ctrl, nsid,
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
-            });
-            },
+        });
+    },
             yield);
 
     // exception must be thrown outside of the async block
@@ -1134,5 +1134,5 @@ void NVMeSubsystem::sanitizeStatus(
            san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED,
            san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETE_SUCCESS,
            log->sstat, log->sprog, log->scdw10);
-        });
+    });
 }

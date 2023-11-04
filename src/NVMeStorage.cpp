@@ -34,16 +34,15 @@ void NVMeStorage::init(std::shared_ptr<NVMeStorage> self)
     self->nvmeStorageInterface = self->objServer.add_interface(
         self->path, "xyz.openbmc_project.Nvme.Storage");
     self->nvmeStorageInterface->register_method(
-        "CreateVolume",
-        [weak{std::weak_ptr<NVMeStorage>(self)}](
-            boost::asio::yield_context yield, uint64_t size, size_t lbaFormat,
-            bool metadataAtEnd) {
+        "CreateVolume", [weak{std::weak_ptr<NVMeStorage>(self)}](
+                            boost::asio::yield_context yield, uint64_t size,
+                            size_t lbaFormat, bool metadataAtEnd) {
         if (auto self = weak.lock())
         {
             return self->createVolume(yield, size, lbaFormat, metadataAtEnd);
         }
         throw *makeLibNVMeError("storage removed");
-        });
+    });
 
     std::vector<std::tuple<size_t, size_t, size_t, RelPerf>> prop;
     self->nvmeStorageInterface->register_property("SupportedFormats", prop);

@@ -297,7 +297,7 @@ void ChassisIntrusionSensor::start()
         "Status", mValue,
         [&](const std::string& req, std::string& propertyValue) {
         return setSensorValue(req, propertyValue);
-        });
+    });
     mIface->initialize();
     pollSensorStatus();
 }
