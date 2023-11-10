@@ -7,6 +7,8 @@
 #include "NVMeUtil.hpp"
 #include "Thresholds.hpp"
 
+#include <dlfcn.h>
+
 #include <charconv>
 #include <filesystem>
 
@@ -380,6 +382,17 @@ void NVMeSubsystem::markAvailable(bool toggle)
 }
 void NVMeSubsystem::start()
 {
+    for (auto [_, lib] : pluginLibMap)
+    {
+        createplugin_t pluginFunc =
+            reinterpret_cast<createplugin_t>(::dlsym(lib, "createPlugin"));
+        auto p = pluginFunc(shared_from_this(), config);
+        if (p)
+        {
+            plugin = p;
+            break;
+        }
+    }
     // add thermal sensor for the subsystem
     std::optional<std::string> sensorName = createSensorNameFromPath(path);
     if (!sensorName)

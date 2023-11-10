@@ -16,7 +16,10 @@
 
 #include "NVMeBasic.hpp"
 #include "NVMeMi.hpp"
+#include "NVMePlugin.hpp"
 #include "NVMeSubsys.hpp"
+
+#include <dlfcn.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -30,6 +33,8 @@ static NVMEMap nvmeSubsysMap;
 
 // flag to set a single worker thread for all nvme eps under the same i2c bus
 static bool singleThreadMode = false;
+
+std::unordered_map<std::string, void*> pluginLibMap = {};
 
 static std::optional<int>
     extractBusNumber(const std::string& path,
@@ -342,6 +347,24 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
 
 int main()
 {
+    // Load plugin shared libraries
+    try
+    {
+        for (const auto& entry :
+             std::filesystem::directory_iterator(NVMePlugin::libraryPath))
+        {
+            void* lib = dlopen(entry.path().c_str(), RTLD_NOW);
+            if (lib != nullptr)
+            {
+                pluginLibMap.emplace(entry.path().filename().string(), lib);
+            }
+        }
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        std::cerr << "failed to open plugin folder: " << e.what() << std::endl;
+    }
+
     // TODO: set single thread mode according to input parameters
 
     boost::asio::io_context io;
@@ -401,4 +424,9 @@ int main()
                   << error.message() << std::endl;
     });
     io.run();
+
+    for (const auto& [_, lib] : pluginLibMap)
+    {
+        dlclose(lib);
+    }
 }

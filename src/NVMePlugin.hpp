@@ -3,6 +3,15 @@
 #include "NVMeSubsys.hpp"
 #include "Utils.hpp"
 
+#include <unordered_map>
+
+// A map from library name to the dlopen() pointer
+extern std::unordered_map<std::string, void*> pluginLibMap;
+
+// entry function for plugin library to create the plugin instance
+using createplugin_t = std::shared_ptr<NVMePlugin> (*)(
+    std::shared_ptr<NVMeSubsystem> subsys, const SensorData& config);
+
 class NVMePlugin;
 
 class NVMeControllerPlugin
@@ -143,6 +152,9 @@ class NVMePlugin
     {
         return;
     }
+
+  public:
+    static constexpr const char* libraryPath = "/usr/lib/nvmed/";
 
   protected:
     const std::string& getPath() const

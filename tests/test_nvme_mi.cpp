@@ -1,11 +1,17 @@
 #include "NVMeMiFake.hpp"
 #include "NVMeSubsys.hpp"
 
+#include <dlfcn.h>
+
 #include <sdbusplus/asio/connection.hpp>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#define xstr(s) str(s)
+#define str(s) #s
+
+std::unordered_map<std::string, void*> pluginLibMap = {};
 class NVMeMiMock :
     public NVMeMiIntf,
     public std::enable_shared_from_this<NVMeMiMock>
@@ -182,6 +188,25 @@ class NVMeTest : public ::testing::Test
         system_bus =
             std::make_shared<sdbusplus::asio::connection>(NVMeTest::io);
         system_bus->request_name("xyz.openbmc_project.NVMeTest");
+
+        // Load plugin shared libraries
+        try
+        {
+            for (const auto& entry :
+                 std::filesystem::directory_iterator(xstr(BUILDDIR)))
+            {
+                void* lib = dlopen(entry.path().c_str(), RTLD_NOW);
+                if (lib != nullptr)
+                {
+                    pluginLibMap.emplace(entry.path().filename().string(), lib);
+                }
+            }
+        }
+        catch (const std::filesystem::filesystem_error& e)
+        {
+            std::cerr << "failed to open plugin folder: " << e.what()
+                      << std::endl;
+        }
     }
 
     void SetUp() override

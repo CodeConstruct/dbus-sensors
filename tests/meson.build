@@ -38,6 +38,16 @@ test(
     )
 )
 
+plugin = shared_library('FakePlugin',
+    '../src/NVMeFakePlugin.cpp',
+    cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
+    dependencies: nvme_deps,
+    implicit_include_directories: false,
+    include_directories: '../src',
+)
+
+plugin_dep = declare_dependency(link_with: plugin)
+
 if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMapper').returncode() == 0
     test(
         'test_nvme',
@@ -52,8 +62,8 @@ if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMap
             '../src/NVMeStorage.cpp',
             '../src/NVMeDrive.cpp',
             '../src/NVMeVolume.cpp',
-            cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
-            dependencies: [ut_deps_list, nvme_deps],
+            cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING','-DBUILDDIR='+ meson.current_build_dir()],
+            dependencies: [ut_deps_list, nvme_deps, nlohmann_json, plugin_dep],
             implicit_include_directories: false,
             include_directories: '../src',
         )
