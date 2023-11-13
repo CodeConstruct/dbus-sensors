@@ -231,6 +231,21 @@ if get_option('nvme').enabled()
         install: true,
         include_directories: nvme_dbus_includes,
     )
+
+    nvme_plugin_inc = include_directories('./')
+
+    nvme_plugin_dep = declare_dependency(
+        include_directories: nvme_plugin_inc,
+        dependencies: [nvme_dbus_dep, pdi_dep], 
+    )
+
+    pkgconfig = import('pkgconfig')
+    pkgconfig.generate(
+        name: 'nvme-plugin', 
+        version: meson.project_version(), 
+        description: 'nvmed plugin package',
+        subdirs: ['.', 'gen']
+    )
 endif
 
 if get_option('psu').enabled()
