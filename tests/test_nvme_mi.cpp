@@ -200,6 +200,11 @@ class NVMeTest : public ::testing::Test
                 {
                     pluginLibMap.emplace(entry.path().filename().string(), lib);
                 }
+                else
+                {
+                    std::cerr << "could not load the plugin: " << dlerror()
+                              << std::endl;
+                }
             }
         }
         catch (const std::filesystem::filesystem_error& e)

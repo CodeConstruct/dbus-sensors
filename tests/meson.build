@@ -41,7 +41,8 @@ test(
 plugin = shared_library('FakePlugin',
     '../src/NVMeFakePlugin.cpp',
     cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
-    dependencies: nvme_deps,
+    dependencies: nvme_plugin_dep,
+    link_args: ['-Wl,--unresolved-symbols=ignore-in-object-files'],
     implicit_include_directories: false,
     include_directories: '../src',
 )
@@ -63,6 +64,7 @@ if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMap
             '../src/NVMeDrive.cpp',
             '../src/NVMeVolume.cpp',
             cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING','-DBUILDDIR='+ meson.current_build_dir()],
+            link_args:['-export-dynamic'],
             dependencies: [ut_deps_list, nvme_deps, nlohmann_json, plugin_dep],
             implicit_include_directories: false,
             include_directories: '../src',

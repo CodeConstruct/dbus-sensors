@@ -228,6 +228,7 @@ if get_option('nvme').enabled()
         sources: nvme_srcs,
         dependencies: nvme_deps,
         cpp_args: ['-frtti', '-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
+        link_args: ['-export-dynamic'],
         install: true,
         include_directories: nvme_dbus_includes,
     )
@@ -236,7 +237,7 @@ if get_option('nvme').enabled()
 
     nvme_plugin_dep = declare_dependency(
         include_directories: nvme_plugin_inc,
-        dependencies: [nvme_dbus_dep, pdi_dep], 
+        dependencies: [nvme_dbus_dep, pdi_dep, libnvme_mi], 
     )
 
     pkgconfig = import('pkgconfig')
