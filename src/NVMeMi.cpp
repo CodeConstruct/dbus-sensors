@@ -234,16 +234,17 @@ NVMeMi::~NVMeMi()
 
 void NVMeMi::Worker::post(std::function<void(void)>&& func)
 {
-    if (workerStop)
+    if (!workerStop)
     {
-        throw std::runtime_error("NVMeMi has been stopped");
+        std::unique_lock<std::mutex> lock(workerMtx);
+        if (!workerStop)
+        {
+            workerIO.post(std::move(func));
+            workerCv.notify_all();
+            return;
+        }
     }
-
-    // TODO: need a timeout on this lock so we can return
-    // a useful "busy" error message when the NVMe-MI endpoint is in-use
-    std::unique_lock<std::mutex> lock(workerMtx);
-    workerIO.post(std::move(func));
-    workerCv.notify_all();
+    throw std::runtime_error("NVMeMi has been stopped");
 }
 
 void NVMeMi::post(std::function<void(void)>&& func)
