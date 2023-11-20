@@ -195,7 +195,7 @@ NVMeMi::Worker::Worker()
 { // start worker thread
     workerStop = false;
     thread = std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
-                          &cv = workerCv]() {
+                          &cv = workerCv, &isNotified = workerIsNotified]() {
         // With BOOST_ASIO_DISABLE_THREADS, boost::asio::executor_work_guard
         // issues null_event across the thread, which caused invalid invokation.
         // We implement a simple invoke machenism based std::condition_variable.
@@ -205,7 +205,9 @@ NVMeMi::Worker::Worker()
             io.restart();
             {
                 std::unique_lock<std::mutex> lock(mtx);
-                cv.wait(lock);
+                cv.wait(lock, [&]() { return isNotified; });
+                isNotified = false;
+
                 if (stop)
                 {
                     // exhaust all tasks and exit
@@ -223,6 +225,7 @@ NVMeMi::Worker::~Worker()
     workerStop = true;
     {
         std::unique_lock<std::mutex> lock(workerMtx);
+        workerIsNotified = true;
         workerCv.notify_all();
     }
     thread.join();
@@ -239,6 +242,7 @@ void NVMeMi::Worker::post(std::function<void(void)>&& func)
         std::unique_lock<std::mutex> lock(workerMtx);
         if (!workerStop)
         {
+            workerIsNotified = true;
             workerIO.post(std::move(func));
             workerCv.notify_all();
             return;

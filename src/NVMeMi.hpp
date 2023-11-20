@@ -133,6 +133,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         std::mutex workerMtx;
         std::condition_variable workerCv;
         boost::asio::io_context workerIO;
+        bool workerIsNotified = false;
         std::thread thread;
 
       public:

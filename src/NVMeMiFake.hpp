@@ -28,8 +28,9 @@ class NVMeMiFake :
     {
         // start worker thread
         workerStop = false;
-        thread = std::thread([&io = workerIO, &stop = workerStop,
-                              &mtx = workerMtx, &cv = workerCv]() {
+        thread =
+            std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
+                         &cv = workerCv, &isNotified = workerIsNotified]() {
             std::cerr << "NVMeMiFake worker thread started: " << io.stopped()
                       << std::endl;
             // With BOOST_ASIO_DISABLE_THREADS, boost::asio::executor_work_guard
@@ -47,7 +48,8 @@ class NVMeMiFake :
                 std::cerr << "job done" << std::endl;
                 {
                     std::unique_lock<std::mutex> lock(mtx);
-                    cv.wait(lock);
+                    cv.wait(lock, [&]() { return isNotified; });
+                    isNotified = false;
                     if (stop)
                     {
                         // exhaust all tasks and exit
@@ -78,6 +80,7 @@ class NVMeMiFake :
         workerStop = true;
         {
             std::unique_lock<std::mutex> lock(workerMtx);
+            workerIsNotified = true;
             workerCv.notify_all();
         }
         thread.join();
@@ -508,6 +511,7 @@ class NVMeMiFake :
     std::mutex workerMtx;
     std::condition_variable workerCv;
     boost::asio::io_context workerIO;
+    bool workerIsNotified = false;
     std::thread thread;
 
     void post(std::function<void(void)>&& func);
@@ -521,6 +525,7 @@ void NVMeMiFake::post(std::function<void(void)>&& func)
         if (!workerStop)
         {
             std::cerr << "do post" << std::endl;
+            workerIsNotified = true;
             workerIO.post(std::move(func));
             workerCv.notify_all();
             return;
