@@ -128,14 +128,39 @@ nvme_dbus_lib = static_library(
   dependencies: nvme_dbus_deps)
 
 generated_files_headers = []
+generated_files_cpp = []
 foreach s : generated_sources
     foreach f : s.to_list()
         p = f.full_path()
         if p.endswith('.hpp')
             generated_files_headers += f
+        elif p.endswith('.cpp')
+            generated_files_cpp += f
+        else
+            error('Unknown filetype: ' + p)
         endif
     endforeach
 endforeach
+
+generated_root = meson.current_build_dir() / 'gen/'
+exclude_cpp = []
+foreach f : generated_files_cpp
+    exclude_cpp += f.full_path().replace(generated_root, '').strip('/')
+endforeach
+
+# Install the generated header files.
+exclude = exclude_cpp
+foreach o : generated_others
+    foreach f : o.to_list()
+        exclude += f.full_path().replace(generated_root, '').strip('/')
+    endforeach
+endforeach
+install_subdir(
+    generated_root,
+    exclude_files: exclude,
+    install_dir: get_option('includedir')/'nvmed',
+    strip_directory: true,
+)
 
 nvme_dbus_dep = declare_dependency(
   sources: generated_files_headers,

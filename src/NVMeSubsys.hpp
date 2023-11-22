@@ -2,14 +2,13 @@
 #include "NVMeBasic.hpp"
 #include "NVMeController.hpp"
 #include "NVMeDrive.hpp"
+#include "NVMePlugin.hpp"
 #include "NVMeProgress.hpp"
 #include "NVMeSensor.hpp"
 #include "NVMeStorage.hpp"
 #include "NVMeUtil.hpp"
 #include "Utils.hpp"
 
-class NVMeControllerPlugin;
-class NVMePlugin;
 class NVMeVolume;
 class NVMeCreateVolumeProgress;
 
@@ -18,8 +17,6 @@ class NVMeSubsystem :
     public NVMeStorage
 {
   public:
-    static constexpr const char* sensorType = "NVME1000";
-
     static std::shared_ptr<NVMeSubsystem>
         create(boost::asio::io_context& io,
                sdbusplus::asio::object_server& objServer,

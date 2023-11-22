@@ -1,6 +1,4 @@
 #pragma once
-#include "NVMeSensor.hpp"
-
 #include <boost/algorithm/string/join.hpp>
 #include <boost/asio.hpp>
 
@@ -8,6 +6,11 @@
 #include <iostream>
 #include <optional>
 #include <system_error>
+
+namespace nvme
+{
+static constexpr const char* sensorType = "NVME1000";
+}
 
 inline std::filesystem::path deriveRootBusPath(int busNumber)
 {

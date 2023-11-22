@@ -1,7 +1,7 @@
 conf_data = configuration_data()
 conf_data.set10('VALIDATION_UNSECURE_FEATURE', get_option('validate-unsecure-feature').enabled())
 conf_data.set10('INSECURE_UNRESTRICTED_SENSOR_OVERRIDE', get_option('insecure-sensor-override').enabled())
-configure_file(input: 'dbus-sensor_config.h.in',
+conf_hdr = configure_file(input: 'dbus-sensor_config.h.in',
                output: 'dbus-sensor_config.h',
                configuration: conf_data)
 
@@ -203,6 +203,7 @@ if get_option('nvme').enabled()
         'NVMeDrive.cpp',
         'NVMeError.cpp',
         'NVMeStorage.cpp',
+        'NVMePlugin.cpp',
     )
 
     pdi_dep = phosphor_dbus_interfaces_dep
@@ -245,8 +246,22 @@ if get_option('nvme').enabled()
         name: 'nvme-plugin', 
         version: meson.project_version(), 
         description: 'nvmed plugin package',
-        subdirs: ['.', 'gen']
+        subdirs: ['.', 'gen', 'nvmed']
     )
+
+    install_headers(
+        'Utils.hpp',
+        'NVMePlugin.hpp',
+        'NVMeUtil.hpp',
+        'VariantVisitors.hpp',
+        conf_hdr,
+        'SensorPaths.hpp',
+        'Thresholds.hpp',
+        'sensor.hpp',
+        'NVMeSensor.hpp',
+        subdir: 'nvmed'
+    )
+
 endif
 
 if get_option('psu').enabled()

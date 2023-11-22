@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NVMeIntf.hpp"
+#include "NVMePlugin.hpp"
 #include "Utils.hpp"
 
 #include <boost/asio.hpp>
@@ -19,7 +20,6 @@ using SoftwareVersion =
 using SoftwareExtVersion =
     sdbusplus::xyz::openbmc_project::Software::server::ExtendedVersion;
 
-class NVMeControllerPlugin;
 class NVMeSubsystem;
 
 /**

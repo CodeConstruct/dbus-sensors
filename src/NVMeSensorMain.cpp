@@ -142,7 +142,7 @@ static void handleConfigurations(
     {
         // find base configuration
         auto sensorBase =
-            configData.find(configInterfaceName(NVMeSubsystem::sensorType));
+            configData.find(configInterfaceName(nvme::sensorType));
         if (sensorBase == configData.end())
         {
             continue;
@@ -224,7 +224,7 @@ static void handleConfigurations(
     {
         // find base configuration
         auto sensorBase =
-            configData.find(configInterfaceName(NVMeSubsystem::sensorType));
+            configData.find(configInterfaceName(nvme::sensorType));
         if (sensorBase == configData.end())
         {
             continue;
@@ -311,8 +311,7 @@ void createNVMeSubsystems(
         }
     });
 
-    getter->getConfiguration(
-        std::vector<std::string>{NVMeSubsystem::sensorType});
+    getter->getConfiguration(std::vector<std::string>{nvme::sensorType});
 }
 
 static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
@@ -329,7 +328,7 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
     message.read(path, interfaces);
 
     auto interface = std::find(interfaces.begin(), interfaces.end(),
-                               configInterfaceName(NVMeSubsystem::sensorType));
+                               configInterfaceName(nvme::sensorType));
     if (interface == interfaces.end())
     {
         return;

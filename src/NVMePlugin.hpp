@@ -1,9 +1,20 @@
 #pragma once
-#include "NVMeController.hpp"
-#include "NVMeSubsys.hpp"
+
 #include "Utils.hpp"
 
+#include <libnvme-mi.h>
+
+#include <functional>
+#include <memory>
+#include <span>
+#include <string>
 #include <unordered_map>
+
+class NVMeSubsystem;
+class NVMeController;
+
+class NVMePlugin;
+class NVMeControllerPlugin;
 
 // A map from library name to the dlopen() pointer
 extern std::unordered_map<std::string, void*> pluginLibMap;
@@ -11,8 +22,6 @@ extern std::unordered_map<std::string, void*> pluginLibMap;
 // entry function for plugin library to create the plugin instance
 using createplugin_t = std::shared_ptr<NVMePlugin> (*)(
     std::shared_ptr<NVMeSubsystem> subsys, const SensorData& config);
-
-class NVMePlugin;
 
 class NVMeControllerPlugin
 {
@@ -34,28 +43,11 @@ class NVMeControllerPlugin
     }
 
   protected:
-    const std::string& getPath() const
-    {
-        return nvmeController->path;
-    }
-    sdbusplus::asio::object_server& getDbusServer()
-    {
-        return nvmeController->objServer;
-    }
-    std::shared_ptr<sdbusplus::asio::connection> getDbusConnection()
-    {
-        return nvmeController->conn;
-    }
-
-    boost::asio::io_context& getIOContext()
-    {
-        return nvmeController->io;
-    }
-
-    bool isPrimary() const
-    {
-        return nvmeController->isPrimary;
-    }
+    const std::string& getPath() const;
+    sdbusplus::asio::object_server& getDbusServer();
+    std::shared_ptr<sdbusplus::asio::connection> getDbusConnection();
+    boost::asio::io_context& getIOContext();
+    bool isPrimary() const;
 
     /**
      * adminXfer() -  transfer Raw admin cmd to the binded conntroller
@@ -90,20 +82,13 @@ class NVMeControllerPlugin
                    std::span<uint8_t> data, unsigned int timeout_ms,
                    std::function<void(const std::error_code& ec,
                                       const nvme_mi_admin_resp_hdr& admin_resp,
-                                      std::span<uint8_t> resp_data)>&& cb)
-    {
-        nvmeController->nvmeIntf->adminXfer(nvmeController->nvmeCtrl, admin_req,
-                                            data, timeout_ms, std::move(cb));
-    }
+                                      std::span<uint8_t> resp_data)>&& cb);
     /**
      * @brief Get cntrl_id for the binded NVMe controller
      *
      * @return cntrl_id
      */
-    uint16_t getCntrlId() const
-    {
-        return nvmeController->getCntrlId();
-    }
+    uint16_t getCntrlId() const;
 
   private:
     std::shared_ptr<NVMeController> nvmeController;
@@ -120,24 +105,7 @@ class NVMePlugin
 
     std::shared_ptr<NVMeControllerPlugin>
         createControllerPlugin(const NVMeController& controller,
-                               const SensorData& config)
-    {
-        // searching for the target controller in NVMe subsystem
-        auto res = subsystem->controllers.find(controller.getCntrlId());
-        if (res == subsystem->controllers.end() ||
-            &controller != res->second.first.get())
-        {
-            std::cerr << ("Failed to create controller plugin: "
-                          "cannot find the controller")
-                      << std::endl;
-            res->second.second.reset();
-            return {};
-        }
-
-        // insert the plugin
-        res->second.second = makeController(res->second.first, config);
-        return res->second.second;
-    }
+                               const SensorData& config);
 
     // the NVMe subsystem will start the plugin after NVMesubsystem finished
     // intialization and started.
@@ -157,33 +125,15 @@ class NVMePlugin
     static constexpr const char* libraryPath = "/usr/lib/nvmed/";
 
   protected:
-    const std::string& getPath() const
-    {
-        return subsystem->path;
-    }
-    const std::string& getName() const
-    {
-        return subsystem->name;
-    }
-    boost::asio::io_context& getIOContext()
-    {
-        return subsystem->io;
-    }
-    sdbusplus::asio::object_server& getDbusServer()
-    {
-        return subsystem->objServer;
-    }
-    std::shared_ptr<sdbusplus::asio::connection> getDbusConnection()
-    {
-        return subsystem->conn;
-    }
+    const std::string& getPath() const;
+    const std::string& getName() const;
+    boost::asio::io_context& getIOContext();
+    sdbusplus::asio::object_server& getDbusServer();
+    std::shared_ptr<sdbusplus::asio::connection> getDbusConnection();
 
     const std::map<uint16_t, std::pair<std::shared_ptr<NVMeController>,
                                        std::shared_ptr<NVMeControllerPlugin>>>&
-        getControllers()
-    {
-        return subsystem->controllers;
-    }
+        getControllers();
     // The nvme plugin implemenation need to overload the function to create a
     // derived controller plugin.
     virtual std::shared_ptr<NVMeControllerPlugin>

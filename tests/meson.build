@@ -63,6 +63,7 @@ if run_command('/usr/bin/bash', '-c', 'busctl tree xyz.openbmc_project.ObjectMap
             '../src/NVMeStorage.cpp',
             '../src/NVMeDrive.cpp',
             '../src/NVMeVolume.cpp',
+            '../src/NVMePlugin.cpp',
             cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING','-DBUILDDIR='+ meson.current_build_dir()],
             link_args:['-export-dynamic'],
             dependencies: [ut_deps_list, nvme_deps, nlohmann_json, plugin_dep],
