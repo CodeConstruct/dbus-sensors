@@ -134,8 +134,6 @@ class NVMeSubsystem :
     // mark the availability of the Storage device.
     void markAvailable(bool toggle);
 
-    void fallbackNoSecondary();
-
     sdbusplus::message::object_path
         createVolume(boost::asio::yield_context yield, uint64_t size,
                      size_t lbaFormat, bool metadataAtEnd) override;
