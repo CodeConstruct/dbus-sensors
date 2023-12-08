@@ -105,7 +105,7 @@ subdir('gen/xyz')
 nvme_dbus_includes = include_directories('gen')
 
 # patching the pdi with NVMe interface definitions for CI build
-if run_command('/usr/bin/bash', '-c', '[ ! -f /.dockerenv ]').returncode() == 1
+if get_option('build-type') == 'ci'
   phosphor_dbus_interfaces_dep = dependency('pdi')
 else
   phosphor_dbus_interfaces_dep = dependency('phosphor-dbus-interfaces', 
