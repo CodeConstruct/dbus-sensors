@@ -368,7 +368,29 @@ TEST_F(NVMeTest, TestDriveFunctional)
                             EXPECT_EQ(result.size(), 2);
 
                             subsys->stop();
-                            io.post([&]() { io.stop(); });
+                            // subsys.reset();
+
+                            // wait for storage controller destruction.
+                            timer.expires_after(std::chrono::seconds(1));
+                            timer.async_wait([&](boost::system::error_code) {
+                                system_bus->async_method_call(
+                                    [&](boost::system::error_code,
+                                        const GetSubTreeType& result) {
+                                    // not storage controller should be listed.
+                                    nlohmann::json j(result);
+                                    EXPECT_EQ(result.size(), 0)
+                                        << "The following interfaces remain after STOP: \n"
+                                        << j.dump(2) << std::endl;
+                                    io.stop();
+                                },
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "/xyz/openbmc_project/object_mapper",
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "GetSubTree", subsys_path, 0,
+                                    std::vector<std::string>{
+                                        "xyz.openbmc_project.Inventory."
+                                        "Item.StorageController"});
+                            });
                         },
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
@@ -461,7 +483,28 @@ TEST_F(NVMeTest, TestDriveAbsent)
                             EXPECT_EQ(result.size(), 2);
 
                             subsys->stop();
-                            io.post([&]() { io.stop(); });
+
+                            // wait for storage controller destruction.
+                            timer.expires_after(std::chrono::seconds(1));
+                            timer.async_wait([&](boost::system::error_code) {
+                                system_bus->async_method_call(
+                                    [&](boost::system::error_code,
+                                        const GetSubTreeType& result) {
+                                    // not storage controller should be listed.
+                                    nlohmann::json j(result);
+                                    EXPECT_EQ(result.size(), 0)
+                                        << "The following interfaces remain after STOP: \n"
+                                        << j.dump(2) << std::endl;
+                                    io.stop();
+                                },
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "/xyz/openbmc_project/object_mapper",
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "GetSubTree", subsys_path, 0,
+                                    std::vector<std::string>{
+                                        "xyz.openbmc_project.Inventory."
+                                        "Item.StorageController"});
+                            });
                         },
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
