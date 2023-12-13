@@ -193,6 +193,7 @@ endif
 
 if get_option('nvme').enabled()
     nvme_srcs = files(
+        'MctpEndpoint.cpp',
         'NVMeSensorMain.cpp',
         'NVMeSensor.cpp',
         'NVMeBasic.cpp',
