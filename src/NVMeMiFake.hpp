@@ -62,6 +62,7 @@ class NVMeMiFake :
                       << std::endl;
         });
 
+        ctrls.resize(3);
         std::cerr << "NVMeMiFake constructor" << std::endl;
     }
 
@@ -127,14 +128,15 @@ class NVMeMiFake :
 
         post([self{shared_from_this()}, cb = std::move(cb)] {
             std::cerr << "libnvme: scan" << std::endl;
-            self->io.post([cb{std::move(cb)}]() {
-                auto ctrl1 = new nvme_mi_ctrl;
-                auto ctrl2 = new nvme_mi_ctrl;
-                auto ctrl3 = new nvme_mi_ctrl;
-                ctrl1->id = 0;
-                ctrl2->id = 1;
-                ctrl3->id = 2;
-                std::vector<nvme_mi_ctrl_t> list{ctrl1, ctrl2, ctrl3};
+            self->io.post(
+                [self{self->shared_from_this()}, cb{std::move(cb)}]() {
+                auto& ctrl1 = self->ctrls[0];
+                auto& ctrl2 = self->ctrls[1];
+                auto& ctrl3 = self->ctrls[2];
+                ctrl1.id = 0;
+                ctrl2.id = 1;
+                ctrl3.id = 2;
+                std::vector<nvme_mi_ctrl_t> list{&ctrl1, &ctrl2, &ctrl3};
                 cb({}, list);
             });
         });
@@ -525,6 +527,8 @@ class NVMeMiFake :
     std::thread thread;
 
     void post(std::function<void(void)>&& func);
+
+    std::vector<nvme_mi_ctrl> ctrls;
 };
 
 void NVMeMiFake::post(std::function<void(void)>&& func)
