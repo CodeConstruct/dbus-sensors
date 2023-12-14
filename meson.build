@@ -31,9 +31,6 @@ add_project_arguments(
     '-DBOOST_ALL_NO_LIB',
     '-DBOOST_ALLOW_DEPRECATED_HEADERS',
     '-DBOOST_ASIO_HAS_THREADS',
-    '-DBOOST_ASIO_HAS_IO_URING',
-    '-DBOOST_ASIO_DISABLE_EPOLL',
-    '-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT',
     language: 'cpp',
 )
 
