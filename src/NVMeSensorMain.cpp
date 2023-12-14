@@ -344,7 +344,7 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
     }
 
     subsys->second->stop();
-    nvmeSubsysMap.erase(subsys);
+    subsystems.erase(subsys);
 }
 
 int main()
