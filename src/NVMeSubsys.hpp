@@ -173,8 +173,8 @@ class NVMeSubsystem :
     void querySupportedFormats();
 
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
-    unsigned UnavailableCount = 0;
-    static constexpr unsigned UnavailableMaxCount = 60;
+    unsigned unavailableCount = 0;
+    unsigned unavailableMaxCount = 60;
 
     // process Secondary controller and start controllers and the associated
     // Plugin

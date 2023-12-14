@@ -433,11 +433,11 @@ void NVMeSubsystem::markAvailable(bool toggle)
     if (toggle)
     {
         // TODO: make the Available interface true
-        UnavailableCount = 0;
+        unavailableCount = 0;
         return;
     }
     // TODO: make the Available interface false
-    UnavailableCount = UnavailableMaxCount;
+    unavailableCount = unavailableMaxCount;
 }
 
 std::shared_ptr<NVMeControllerEnabled>
@@ -566,7 +566,7 @@ void NVMeSubsystem::start()
                 std::function<void(const std::error_code&,
                                    nvme_mi_nvm_ss_health_status*)>&& cb) {
             // do not poll the health status if subsystem is in cooldown
-            if (self->UnavailableCount > 0)
+            if (self->unavailableCount > 0)
             {
                 cb(std::make_error_code(std::errc::operation_canceled),
                    nullptr);
@@ -589,9 +589,9 @@ void NVMeSubsystem::start()
              timer = std::weak_ptr<boost::asio::steady_timer>(ctempTimer)](
                 const std::error_code& error,
                 nvme_mi_nvm_ss_health_status* status) {
-            if (self->UnavailableCount > 0)
+            if (self->unavailableCount > 0)
             {
-                self->UnavailableCount--;
+                self->unavailableCount--;
                 return;
             }
 
