@@ -188,7 +188,9 @@ class NVMeTest : public ::testing::Test
         subsys(std::make_shared<NVMeSubsystem>(io, object_server, system_bus,
                                                subsys_path, "NVMe_1",
                                                SensorData{}, nvme_intf))
-    {}
+    {
+        subsys->unavailableMaxCount = 1;
+    }
 
     static void SetUpTestSuite()
     {

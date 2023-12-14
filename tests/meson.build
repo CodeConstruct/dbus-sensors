@@ -74,7 +74,7 @@ if get_option('nvme').enabled() and run_command('/usr/bin/bash', '-c', '[ ! -f /
             '../src/NVMeDrive.cpp',
             '../src/NVMeVolume.cpp',
             '../src/NVMePlugin.cpp',
-            cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING','-DBUILDDIR='+ meson.current_build_dir()],
+            cpp_args: ['-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING','-DBUILDDIR='+ meson.current_build_dir(), '-DNVME_UNIT_TEST=1'],
             link_args:['-export-dynamic'],
             dependencies: [ut_deps_list, nvme_deps, nlohmann_json, plugin_dep],
             implicit_include_directories: false,

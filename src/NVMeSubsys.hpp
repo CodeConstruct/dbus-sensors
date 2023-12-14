@@ -12,6 +12,10 @@
 class NVMeVolume;
 class NVMeCreateVolumeProgress;
 
+#ifdef NVME_UNIT_TEST
+class NVMeTest;
+#endif
+
 class NVMeSubsystem :
     public std::enable_shared_from_this<NVMeSubsystem>,
     public NVMeStorage
@@ -65,6 +69,11 @@ class NVMeSubsystem :
                   const SensorData& configData, NVMeIntf intf);
 
     void init();
+
+#if defined NVME_UNIT_TEST
+    // allow the test fixture change the settings for subsystem
+    friend class NVMeTest;
+#endif
 
   private:
     friend class NVMePlugin;
