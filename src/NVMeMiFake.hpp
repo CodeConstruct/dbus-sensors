@@ -96,6 +96,8 @@ class NVMeMiFake :
         return 0;
     }
 
+    void start() override {}
+
     void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,
                            nvme_mi_nvm_ss_health_status*)>&& cb) override
