@@ -26,17 +26,10 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
                std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
                int addr, bool singleThreadMode, PowerState readState) :
     io(io),
-    conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState)
+    conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState),
+    nvmeEP(nullptr), nid(-1), eid(0), mtu(64), startLoopRunning(false),
+    mctpStatus(Status::Reset)
 {
-    // reset to unassigned nid/eid and endpoint
-    nid = -1;
-    eid = 0;
-    mtu = 64;
-    mctpPath.erase();
-    nvmeEP = nullptr;
-    mctpStatus = Status::Reset;
-    startLoopRunning = false;
-
     // set update the worker thread
     if (!nvmeRoot)
     {
