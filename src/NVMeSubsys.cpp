@@ -12,6 +12,7 @@
 
 #include <charconv>
 #include <filesystem>
+#include <stdexcept>
 
 void NVMeSubsystem::createAssociation()
 {
@@ -540,6 +541,14 @@ void NVMeSubsystem::start()
                                  *sensorName);
     }
 
+    if (ctemp || ctempTimer)
+    {
+        throw std::logic_error(
+            "NVMeSubsystem::start() called from invalid state");
+    }
+
+    assert(!ctemp && !ctempTimer);
+
     ctemp = std::make_shared<NVMeSensor>(objServer, io, conn, *sensorName,
                                          std::move(sensorThresholds), path);
     ctempTimer = std::make_shared<boost::asio::steady_timer>(io);
@@ -723,6 +732,7 @@ void NVMeSubsystem::stop()
     {
         ctempTimer->cancel();
         ctempTimer.reset();
+        ctemp.reset();
     }
 
     if (status == Status::Intiatilzing)
