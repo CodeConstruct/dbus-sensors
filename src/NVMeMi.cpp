@@ -1690,8 +1690,11 @@ void NVMeMi::createNamespace(
 
         printf("verified %d\n", (int)gettid());
 
-        // submission has been verified.
-        submitted_cb(nvme_ex_ptr());
+        // submission has been verified. Handle the cb in main thread
+        // concurrently.
+        self->io.post([submitted_cb{std::move(submitted_cb)}]() {
+            submitted_cb(nvme_ex_ptr());
+        });
         printf("after submitted_cb %d\n", (int)gettid());
 
         unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
