@@ -57,6 +57,24 @@ class MctpEndpoint
     virtual uint8_t eid() const = 0;
 
     /**
+     * @brief Subscribe to events produced by an endpoint object across its
+     *        lifecycle
+     *
+     * @param degraded The callback to execute when the MCTP layer indicates the
+     *                 endpoint is unresponsive
+     *
+     * @param available The callback to execute when the MCTP layer indicates
+     *                  that communication with the degraded endpoint has been
+     *                  recovered
+     *
+     * @param removed The callback to execute when the MCTP layer indicates the
+     *                endpoint has been removed.
+     */
+    virtual void subscribe(std::function<void()>&& degraded,
+                           std::function<void()>&& available,
+                           std::function<void()>&& removed) = 0;
+
+    /**
      * @brief Configures the Maximum Transmission Unit (MTU) for the route to
      *        the endpoint
      *
@@ -71,6 +89,16 @@ class MctpEndpoint
     virtual void
         setMtu(uint32_t mtu,
                std::function<void(const std::error_code& ec)>&& completed) = 0;
+
+    /**
+     * @brief Request that the MCTP layer attempt to recover communication with
+     *        an unresponsive endpoint.
+     *
+     * Recovery progress is indicated by invocation of the @c degraded,
+     * @c available and @c removed handlers registered using the @c events()
+     * API.
+     */
+    virtual void recover() = 0;
 
     /**
      * @return A formatted string representing the endpoint in terms of its
@@ -113,6 +141,14 @@ class MctpDevice
                   action) = 0;
 
     /**
+     * @brief Indicate that the device has been removed.
+     *
+     * May be called prior to destruction to address any tear-down required
+     * without the constraints of a destructor.
+     */
+    virtual void removed() = 0;
+
+    /**
      * @return A formatted string representing the device in terms of its
      *         address properties.
      */
@@ -144,11 +180,23 @@ class MctpdEndpoint :
 
     int network() const override;
     uint8_t eid() const override;
+    void subscribe(std::function<void()>&& degraded,
+                   std::function<void()>&& available,
+                   std::function<void()>&& removed) override;
     void setMtu(
         uint32_t mtu,
         std::function<void(const std::error_code& ec)>&& completed) override;
+    void recover() override;
 
     std::string describe() override;
+
+    /**
+     * @brief Indicate the endpoint has been removed
+     *
+     * Called from the implementation of MctpdDevice::removed() for resource
+     * cleanup prior to destruction.
+     */
+    void remove();
 
   private:
     std::shared_ptr<sdbusplus::asio::connection> connection;
@@ -158,6 +206,13 @@ class MctpdEndpoint :
         int network;
         uint8_t eid;
     } mctp;
+    std::function<void()> available;
+    std::function<void()> degraded;
+    std::function<void()> removed;
+    std::optional<sdbusplus::bus::match_t> connectivityMatch;
+
+    void onMctpEndpointChange(sdbusplus::message_t& msg);
+    void updateEndpointConnectivity(const std::string& connectivity);
 };
 
 /**
@@ -185,6 +240,7 @@ class MctpdDevice :
     void setup(std::function<void(const std::error_code& ec,
                                   const std::shared_ptr<MctpEndpoint>& ep)>&&
                    action) override;
+    void removed() override;
     std::string describe() override = 0;
 
   private:

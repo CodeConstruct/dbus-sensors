@@ -61,6 +61,15 @@ void MctpdDevice::setup(
     }
 }
 
+void MctpdDevice::removed()
+{
+    if (endpoint)
+    {
+        endpoint->remove();
+        endpoint.reset();
+    }
+}
+
 SmbusMctpdDevice::SmbusMctpdDevice(
     const std::shared_ptr<sdbusplus::asio::connection>& connection, int smbus,
     uint8_t smdev) :
@@ -84,6 +93,53 @@ MctpdEndpoint::MctpdEndpoint(
     objpath(std::move(objpath)), mctp{network, eid}
 {}
 
+void MctpdEndpoint::onMctpEndpointChange(sdbusplus::message_t& msg)
+{
+    std::string iface;
+    std::map<std::string, BasicVariantType> changed;
+    std::vector<std::string> invalidated;
+
+    msg.read(iface);
+    msg.read(changed);
+    msg.read(invalidated);
+
+    if (iface != mctpdEndpointControlInterface)
+    {
+        return;
+    }
+
+    auto it = changed.find("Connectivity");
+    if (it == changed.end())
+    {
+        return;
+    }
+
+    updateEndpointConnectivity(std::get<std::string>(it->second));
+}
+
+void MctpdEndpoint::updateEndpointConnectivity(const std::string& connectivity)
+{
+    if (connectivity == "Degraded")
+    {
+        if (degraded)
+        {
+            degraded();
+        }
+    }
+    else if (connectivity == "Available")
+    {
+        if (available)
+        {
+            available();
+        }
+    }
+    else
+    {
+        std::cerr << "Unrecognised connectivity state: '" << connectivity << "'"
+                  << std::endl;
+    }
+}
+
 int MctpdEndpoint::network() const
 {
     return mctp.network;
@@ -92,6 +148,102 @@ int MctpdEndpoint::network() const
 uint8_t MctpdEndpoint::eid() const
 {
     return mctp.eid;
+}
+
+void MctpdEndpoint::subscribe(std::function<void()>&& degraded,
+                              std::function<void()>&& available,
+                              std::function<void()>&& removed)
+{
+    const auto matchType = std::string("type='signal'");
+    const auto matchMember = std::string("member='PropertiesChanged'");
+    const auto pathNamespace = std::string("path_namespace='") + objpath.str +
+                               "'";
+    const auto arg0Namespace = std::string("arg0namespace='") +
+                               mctpdEndpointControlInterface + "'";
+    const auto matchSpec = std::string()
+                               .append(matchType)
+                               .append(",")
+                               .append(matchMember)
+                               .append(",")
+                               .append(pathNamespace)
+                               .append(",")
+                               .append(arg0Namespace);
+
+    this->degraded = degraded;
+    this->available = available;
+    this->removed = removed;
+
+    try
+    {
+        connectivityMatch.emplace(
+            static_cast<sdbusplus::bus_t&>(*connection), matchSpec,
+            [weak{weak_from_this()}](sdbusplus::message_t& msg) {
+            if (auto self = weak.lock())
+            {
+                self->onMctpEndpointChange(msg);
+            }
+        });
+        connection->async_method_call(
+            [weak{weak_from_this()}](const boost::system::error_code& ec,
+                                     const std::variant<std::string>& value) {
+            if (ec)
+            {
+                std::cerr << "Failed to get current connectivity state: " << ec
+                          << std::endl;
+                return;
+            }
+
+            if (auto self = weak.lock())
+            {
+                const std::string& connectivity = std::get<std::string>(value);
+                self->updateEndpointConnectivity(connectivity);
+            }
+        },
+            mctpdBusName, objpath.str, "org.freedesktop.DBus.Properties", "Get",
+            mctpdEndpointControlInterface, "Connectivity");
+    }
+    catch (const sdbusplus::exception::SdBusError& err)
+    {
+        this->degraded = nullptr;
+        this->available = nullptr;
+        this->removed = nullptr;
+        std::throw_with_nested(
+            MctpException("Failed to register connectivity signal match"));
+    }
+}
+
+void MctpdEndpoint::recover()
+{
+    try
+    {
+        connection->async_method_call(
+            [weak{weak_from_this()}](const boost::system::error_code& ec
+                                     [[maybe_unused]]) {
+            if (ec)
+            {
+                if (auto self = weak.lock())
+                {
+                    std::cerr << "Failed to recover device at '"
+                              << self->objpath.str << "'" << std::endl;
+                }
+            }
+        },
+            mctpdBusName, objpath.str, mctpdEndpointControlInterface,
+            "Recover");
+    }
+    catch (const sdbusplus::exception::SdBusError& err)
+    {
+        std::throw_with_nested(
+            MctpException("Failed to schedule endpoint recovery"));
+    }
+}
+
+void MctpdEndpoint::remove()
+{
+    if (removed)
+    {
+        removed();
+    }
 }
 
 void MctpdEndpoint::setMtu(
