@@ -39,6 +39,7 @@ methods:
                 Identify Data
       errors:
           - xyz.openbmc_project.Common.File.Error.Open
+          - xyz.openbmc_project.Common.Error.Unavailable
     - name: GetLogPage
       description: >
           Send GetLogPage command to NVMe device
@@ -67,6 +68,7 @@ methods:
       errors:
           - xyz.openbmc_project.Common.File.Error.Open
           - xyz.openbmc_project.Common.Error.InvalidArgument
+          - xyz.openbmc_project.Common.Error.Unavailable
     - name: FirmwareCommitAsync
       description: >
           Send Firmware Commit command to NVMe device
@@ -83,6 +85,8 @@ methods:
             type: boolean
             description: >
                 Boot Partition ID
+      errors:
+          - xyz.openbmc_project.Common.Error.Unavailable
     - name: FirmwareDownloadAsync
       description: >
           Send Firmware Download command to NVMe device
@@ -91,6 +95,8 @@ methods:
             type: string
             description: >
                 Path to the firmware Image
+      errors:
+          - xyz.openbmc_project.Common.Error.Unavailable
 
 enumerations:
     - name: FwCommitStatus
