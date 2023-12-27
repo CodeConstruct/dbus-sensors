@@ -630,6 +630,10 @@ void NVMeSubsystem::start()
                 ((flags & NVMeBasicIntf::StatusFlags::
                               NVME_MI_BASIC_SFLGS_DRIVE_FUNCTIONAL) == 0))
             {
+                std::cerr
+                    << self->name
+                    << ": health poll returns drive not ready or drive not functional"
+                    << std::endl;
                 self->markFunctional(false);
                 return;
             }
@@ -725,6 +729,8 @@ void NVMeSubsystem::start()
             if (!df)
             {
                 // stop the subsystem
+                std::cerr << self->name << ": health poll returns df status 0"
+                          << std::endl;
                 self->markFunctional(false);
                 return;
             }
