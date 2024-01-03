@@ -865,7 +865,7 @@ int getTelemetryLogSize(nvme_mi_ctrl_t ctrl, bool host, uint32_t& size)
     return rc;
 }
 
-void NVMeMi::getTelemetryLogChuck(
+void NVMeMi::getTelemetryLogChunk(
     nvme_mi_ctrl_t ctrl, bool host, uint64_t offset,
     std::vector<uint8_t>&& data,
     std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb)
@@ -903,7 +903,7 @@ void NVMeMi::getTelemetryLogChuck(
         {
             std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
                       << ", eid: " << static_cast<int>(self->eid) << "]"
-                      << "fail to get chuck for telemetry log: "
+                      << "fail to get chunk for telemetry log: "
                       << std::strerror(errno) << std::endl;
             boost::asio::post(self->io,
                               [cb{std::move(cb)}, last_errno{errno}]() {
@@ -918,7 +918,7 @@ void NVMeMi::getTelemetryLogChuck(
                 statusToString(static_cast<nvme_mi_resp_status>(rc));
             std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
                       << ", eid: " << static_cast<int>(self->eid) << "]"
-                      << "fail to get chuck for telemetry log: " << errMsg
+                      << "fail to get chunk for telemetry log: " << errMsg
                       << std::endl;
             boost::asio::post(self->io, [cb{std::move(cb)}]() {
                 cb(std::make_error_code(std::errc::bad_message), {});
@@ -940,7 +940,7 @@ void NVMeMi::getTelemetryLogChuck(
         boost::asio::post(self->io,
                           [self, ctrl, host, offset, data{std::move(data)},
                            cb{std::move(cb)}]() mutable {
-            self->getTelemetryLogChuck(ctrl, host, offset, std::move(data),
+            self->getTelemetryLogChunk(ctrl, host, offset, std::move(data),
                                        std::move(cb));
         });
     });
@@ -1094,7 +1094,7 @@ void NVMeMi::adminGetLogPage(
                         data.resize(size);
                         logHandler = [self, ctrl, host, data{std::move(data)},
                                       cb{std::move(cb)}]() mutable {
-                            self->getTelemetryLogChuck(
+                            self->getTelemetryLogChunk(
                                 ctrl, host, 0, std::move(data), std::move(cb));
                         };
                     }

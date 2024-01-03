@@ -205,7 +205,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         size_t offset, int attempt_count,
         std::function<void(const std::error_code&, nvme_status_field)>&& cb);
 
-    void getTelemetryLogChuck(
+    void getTelemetryLogChunk(
         nvme_mi_ctrl_t ctrl, bool host, uint64_t offset,
         std::vector<uint8_t>&& data,
         std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb);
