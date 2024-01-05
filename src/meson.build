@@ -228,7 +228,14 @@ if get_option('nvme').enabled()
         'nvmesensor',
         sources: nvme_srcs,
         dependencies: nvme_deps,
-        cpp_args: ['-frtti', '-UBOOST_ASIO_NO_DEPRECATED', '-UBOOST_ASIO_DISABLE_THREADS', '-UBOOST_ASIO_HAS_IO_URING'],
+        cpp_args: [
+            '-frtti',
+            '-DBOOST_ASIO_DISABLE_EPOLL',
+            '-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT',
+            '-UBOOST_ASIO_NO_DEPRECATED',
+            '-UBOOST_ASIO_DISABLE_THREADS',
+            '-UBOOST_ASIO_HAS_IO_URING'
+        ],
         link_args: ['-export-dynamic'],
         install: true,
         include_directories: nvme_dbus_includes,

@@ -8,7 +8,7 @@ project(
     ],
     license: 'Apache-2.0',
     version: '0.1',
-    meson_version: '>=0.58.0',
+    meson_version: '>=0.63.0',
 )
 
 # Enable io_uring for all daemons with below flags. 
