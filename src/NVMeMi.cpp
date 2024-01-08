@@ -234,6 +234,21 @@ bool NVMeMi::isMCTPconnect() const
     return mctpStatus == Status::Connected;
 }
 
+std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
+{
+    if (!nvmeEP)
+    {
+        return std::make_error_code(std::errc::no_such_device);
+    }
+
+    if (!isMCTPconnect())
+    {
+        return std::make_error_code(std::errc::not_connected);
+    }
+
+    return std::nullopt;
+}
+
 NVMeMi::Worker::Worker()
 { // start worker thread
     workerStop = false;
@@ -324,12 +339,12 @@ void NVMeMi::miConfigureSMBusFrequency(
     uint8_t port_id, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (!nvmeEP)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}]() {
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
             cb(std::make_error_code(std::errc::no_such_device));
         });
         mctpStatus = Status::Reset;
@@ -387,14 +402,12 @@ void NVMeMi::miConfigureRemoteMCTP(
     uint8_t port, uint16_t mtu, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (!nvmeEP)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::no_such_device));
-        });
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc); });
         mctpStatus = Status::Reset;
         return;
     }
@@ -442,14 +455,12 @@ void NVMeMi::miConfigureRemoteMCTP(
 void NVMeMi::miSetMCTPConfiguration(
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (!nvmeEP)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::no_such_device));
-        });
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc); });
         mctpStatus = Status::Reset;
         return;
     }
@@ -560,14 +571,14 @@ void NVMeMi::miSubsystemHealthStatusPoll(
     std::function<void(const std::error_code&, nvme_mi_nvm_ss_health_status*)>&&
         cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
 
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected), nullptr);
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+            cb(errc, nullptr);
         });
         return;
     }
@@ -626,15 +637,14 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
                                            const std::vector<nvme_mi_ctrl_t>&)>
                             cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
 
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected), {});
-        });
+        io.post(
+            [cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc, {}); });
         return;
     }
 
@@ -711,13 +721,13 @@ void NVMeMi::adminIdentify(
     nvme_mi_ctrl_t ctrl, nvme_identify_cns cns, uint32_t nsid, uint16_t cntid,
     std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(makeLibNVMeError("nvme endpoint is invalid"), {});
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+            cb(makeLibNVMeError("nvme endpoint is degraded"), {});
         });
         return;
     }
@@ -944,14 +954,13 @@ void NVMeMi::adminGetLogPage(
     uint16_t lsi,
     std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected), {});
-        });
+        io.post(
+            [cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc, {}); });
         return;
     }
 
@@ -1194,16 +1203,17 @@ void NVMeMi::adminXfer(
     std::function<void(const std::error_code&, const nvme_mi_admin_resp_hdr&,
                        std::span<uint8_t>)>&& cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected), {}, {});
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+            cb(errc, {}, {});
         });
         return;
     }
+
     try
     {
         std::vector<uint8_t> req(sizeof(nvme_mi_admin_req_hdr) + data.size());
@@ -1277,14 +1287,13 @@ void NVMeMi::adminFwCommit(
     nvme_mi_ctrl_t ctrl, nvme_fw_commit_ca action, uint8_t slot, bool bpid,
     std::function<void(const std::error_code&, nvme_status_field)>&& cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected),
-               nvme_status_field::NVME_SC_MASK);
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+            cb(errc, nvme_status_field::NVME_SC_MASK);
         });
         return;
     }
@@ -1356,14 +1365,13 @@ void NVMeMi::adminFwDownloadChunk(
     int attempt_count,
     std::function<void(const std::error_code&, nvme_status_field)>&& cb)
 {
-    if (mctpStatus != Status::Connected)
+    if (auto degraded = isEndpointDegraded())
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << " MCTP connection is not established" << std::endl;
-        io.post([cb{std::move(cb)}]() {
-            cb(std::make_error_code(std::errc::not_connected),
-               nvme_status_field::NVME_SC_MASK);
+        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+            cb(errc, nvme_status_field::NVME_SC_MASK);
         });
         return;
     }

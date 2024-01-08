@@ -193,6 +193,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     bool isMCTPconnect() const;
 
+    std::optional<std::error_code> isEndpointDegraded() const;
+
     bool readingStateGood() const
     {
         return ::readingStateGood(readState);
