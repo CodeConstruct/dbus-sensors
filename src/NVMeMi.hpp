@@ -6,12 +6,30 @@
 
 #include <thread>
 
+// A worker thread for calling NVMeMI cmd.
+class NVMeMiWorker
+{
+  private:
+    bool workerStop;
+    std::mutex workerMtx;
+    std::condition_variable workerCv;
+    boost::asio::io_context workerIO;
+    bool workerIsNotified = false;
+    std::thread thread;
+
+  public:
+    NVMeMiWorker();
+    NVMeMiWorker(const NVMeMiWorker&) = delete;
+    ~NVMeMiWorker();
+    void post(std::function<void(void)>&& func);
+};
+
 class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 {
   public:
     NVMeMi(boost::asio::io_context& io,
            std::shared_ptr<sdbusplus::asio::connection> conn, int bus, int addr,
-           bool singleThreadMode = false,
+           const std::shared_ptr<NVMeMiWorker>& worker,
            PowerState readState = PowerState::always);
     ~NVMeMi() override;
 
@@ -182,33 +200,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     bool restart;
     bool startLoopRunning;
 
-    // A worker thread for calling NVMeMI cmd.
-    class Worker
-    {
-      private:
-        bool workerStop;
-        std::mutex workerMtx;
-        std::condition_variable workerCv;
-        boost::asio::io_context workerIO;
-        bool workerIsNotified = false;
-        std::thread thread;
-
-      public:
-        Worker();
-        Worker(const Worker&) = delete;
-        ~Worker();
-        void post(std::function<void(void)>&& func);
-    };
-
-    // A map from root bus number to the Worker
-    // This map means to reuse the same worker for all NVMe EP under the same
-    // I2C root bus. There is no real physical concurrency among the i2c/mctp
-    // devices on the same bus. Though mctp kernel drive can schedule and
-    // sequencialize the transactions but assigning individual worker thread to
-    // each EP makes no sense.
-    static std::map<int, std::weak_ptr<Worker>> workerMap;
-
-    std::shared_ptr<Worker> worker;
+    std::shared_ptr<NVMeMiWorker> worker;
     void post(std::function<void(void)>&& func);
 
     void stop();

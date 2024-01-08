@@ -13,8 +13,6 @@
 #include <iostream>
 #include <stdexcept>
 
-std::map<int, std::weak_ptr<NVMeMi::Worker>> NVMeMi::workerMap{};
-
 // libnvme-mi root service
 nvme_root_t NVMeMi::nvmeRoot = nvme_mi_create_root(stderr, DEFAULT_LOGLEVEL);
 
@@ -27,41 +25,17 @@ constexpr int initCmdTimeoutMS = 1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
                std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
-               int addr, bool singleThreadMode, PowerState readState) :
+               int addr, const std::shared_ptr<NVMeMiWorker>& worker,
+               PowerState readState) :
     io(io),
     conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState),
     mctpStatus(Status::Reset), nid(-1), eid(0), mtu(64), nvmeEP(nullptr),
-    restart(false), startLoopRunning(false)
+    restart(false), startLoopRunning(false), worker(worker)
 {
     // set update the worker thread
     if (!nvmeRoot)
     {
         throw std::runtime_error("invalid NVMe root");
-    }
-
-    if (singleThreadMode)
-    {
-        auto root = deriveRootBus(bus);
-
-        if (!root || *root < 0)
-        {
-            throw std::runtime_error("invalid root bus number");
-        }
-        auto res = workerMap.find(*root);
-
-        if (res == workerMap.end() || res->second.expired())
-        {
-            worker = std::make_shared<Worker>();
-            workerMap[*root] = worker;
-        }
-        else
-        {
-            worker = res->second.lock();
-        }
-    }
-    else
-    {
-        worker = std::make_shared<Worker>();
     }
 
     // setup the power state
@@ -340,7 +314,7 @@ std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
     throw std::logic_error("Unreachable");
 }
 
-NVMeMi::Worker::Worker()
+NVMeMiWorker::NVMeMiWorker()
 { // start worker thread
     workerStop = false;
     thread = std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
@@ -368,7 +342,7 @@ NVMeMi::Worker::Worker()
     });
 }
 
-NVMeMi::Worker::~Worker()
+NVMeMiWorker::~NVMeMiWorker()
 {
     // close worker
     workerStop = true;
@@ -397,7 +371,7 @@ NVMeMi::~NVMeMi()
     }
 }
 
-void NVMeMi::Worker::post(std::function<void(void)>&& func)
+void NVMeMiWorker::post(std::function<void(void)>&& func)
 {
     if (!workerStop)
     {

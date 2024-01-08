@@ -31,6 +31,14 @@
 using NVMEMap = std::map<std::string, std::shared_ptr<NVMeSubsystem>>;
 static NVMEMap nvmeSubsysMap;
 
+// A map from root bus number to the Worker
+// This map means to reuse the same worker for all NVMe EP under the same
+// I2C root bus. There is no real physical concurrency among the i2c/mctp
+// devices on the same bus. Though mctp kernel drive can schedule and
+// sequencialize the transactions but assigning individual worker thread to
+// each EP makes no sense.
+static std::map<int, std::weak_ptr<NVMeMiWorker>> workerMap{};
+
 std::unordered_map<std::string, void*> pluginLibMap = {};
 
 static std::optional<int>
@@ -164,11 +172,37 @@ static void handleConfigurations(
 
             PowerState powerState = getPowerState(sensorConfig);
 
+            std::shared_ptr<NVMeMiWorker> worker;
+            if (singleWorkerFeature)
+            {
+                auto root = deriveRootBus(*busNumber);
+
+                if (!root || *root < 0)
+                {
+                    throw std::runtime_error("invalid root bus number");
+                }
+                auto res = workerMap.find(*root);
+
+                if (res == workerMap.end() || res->second.expired())
+                {
+                    worker = std::make_shared<NVMeMiWorker>();
+                    workerMap[*root] = worker;
+                }
+                else
+                {
+                    worker = res->second.lock();
+                }
+            }
+            else
+            {
+                worker = std::make_shared<NVMeMiWorker>();
+            }
+
             try
             {
-                NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(
-                    io, dbusConnection, *busNumber, *address,
-                    singleWorkerFeature, powerState);
+                NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(io, dbusConnection,
+                                                           *busNumber, *address,
+                                                           worker, powerState);
 
                 auto nvme = std::get<std::shared_ptr<NVMeMiIntf>>(
                     nvmeMi.getInferface());
