@@ -209,25 +209,32 @@ void NVMeMi::stop()
     {
         return;
     }
-    // each nvme mi message transaction should take relatively short time
-    // (typically <= 200 ms). So the blocking time should be short
-    std::unique_lock<std::mutex> lock(mctpMtx);
-    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-              << "start MCTP closure" << std::endl;
-
-    nvme_mi_close(nvmeEP);
 
     // Note: No need to remove MCTP ep from MCTPd since the routing table will
     // re-establish on the next init
 
+    // Invoke nvme_mi_close() via a lambda that we schedule via
+    // flushOperations(). Using flushOperations() ensures that any outstanding
+    // tasks are executed before nvme_mi_close() is invoked, invalidating their
+    // controller reference.
+    auto closeTask [[maybe_unused]] = [self{shared_from_this()}]() {
+        nvme_mi_close(self->nvmeEP);
+        self->nid = -1;
+        self->eid = 0;
+        self->mtu = 64;
+        self->mctpPath.erase();
+        self->nvmeEP = nullptr;
+        std::cerr << "[bus: " << self->bus << ", addr: " << self->addr << "]: "
+                  << "end MCTP closure" << std::endl;
+    };
+
+    // Mark connectivity as disabled for the purpose of the MI tranpsort. This
+    // prevents further queuing of jobs into the worker thread.
     mctpStatus = Status::Reset;
-    nid = -1;
-    eid = 0;
-    mtu = 64;
-    mctpPath.erase();
-    nvmeEP = nullptr;
-    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-              << "finish MCTP closure." << std::endl;
+
+    // Now that further tasks can no-longer be queued, trigger the close of
+    // the endpoint
+    flushOperations(std::move(closeTask));
 }
 
 bool NVMeMi::isMCTPconnect() const
@@ -286,7 +293,20 @@ NVMeMi::Worker::~Worker()
 }
 NVMeMi::~NVMeMi()
 {
-    stop();
+    // If we're being destructed the only thing left to do is to clean up the
+    // endpoint connection. We're in the destructor because the last shared
+    // reference has been dropped, which means it must be the case that no
+    // worker jobs remain queued that reference the instance.
+    //
+    // We can't call epReset() here via stop() as was originally the case.
+    // epReset() prepares the NVMeMi instance for a subsequent epConnect() using
+    // shared_from_this(), which will yield a std::bad_weak_ptr now that we're
+    // in the destructor. Moreover, a subsequent epConnect() is not possible
+    // beyond this point.
+    if (nvmeEP != nullptr)
+    {
+        nvme_mi_close(nvmeEP);
+    }
 }
 
 void NVMeMi::Worker::post(std::function<void(void)>&& func)
