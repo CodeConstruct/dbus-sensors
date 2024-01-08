@@ -119,13 +119,60 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     std::unique_ptr<PowerCallbackEntry> powerCallback;
     PowerState readState;
 
-    // mctp connection
-    nvme_mi_ep_t nvmeEP;
+    /*
+     * A state machine to represent the current status of the MCTP connection.
+     * In Reset state, the MCTP endpoint (EP) is not setup with the device.
+     * In event of successful setup we move from Reset to Configured. If
+     * opening the EP is successful from Configured the status will change to
+     * Initiated. The status will change to Connected once the MTU of local
+     * and device side MTU and frequency is optimized. In an event of
+     * connection EP closure, the status will move back to Reset.
+     *
+     * Transitions to the terminal state indicate a logic error.
+     *
+     * stateDiagram
+     *   [*] --> Reset
+     *
+     *   Reset --> Reset: epReset()
+     *   Reset --> Configured: epConfigure()
+     *   Reset --> [*]: epConnect()
+     *   Reset --> [*]: epOptimize()
+     *
+     *   Configured --> Reset: epReset()
+     *   Configured --> Configured: epConfigure()
+     *   Configured --> Initiated: epConnect()
+     *   Configured --> [*]: epOptimize()
+     *
+     *   Initiated --> Reset: epReset()
+     *   Initiated --> [*]: epConfigure()
+     *   Initiated --> Initiated: epConnect()
+     *   Initiated --> Connected: epOptimize()
+     *
+     *   Connected --> Reset: epReset()
+     *   Connected --> [*]: epConfigure()
+     *   Connected --> Connected: epConnect()
+     *   Connected --> Connected: epOptimize()
+     */
+    enum class Status
+    {
+        Reset,
+        Configured,
+        Initiated,
+        Connected,
+    };
 
+    void epReset();
+    void epConfigure(int lnid, uint8_t leid, const std::string& lpath);
+    bool epConnect();
+    void epOptimize();
+
+    Status mctpStatus;
     int nid;
     uint8_t eid;
     uint16_t mtu;
     std::string mctpPath;
+    nvme_mi_ep_t nvmeEP;
+    bool startLoopRunning;
 
     std::mutex mctpMtx;
 
@@ -146,23 +193,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         ~Worker();
         void post(std::function<void(void)>&& func);
     };
-
-    // A state machine to represent the current status of the MCTP connection.
-    // In Reset state, the MCTP endpoint (EP) is not setup with the device. In
-    // event of successful setup and opening of EP, the status will change to
-    // Initiated. The status will change to Connected, once the MTU of local and
-    // device side MTU and frequency is changed. In an event of connection EP
-    // closure, the status will move back to Reset.
-    enum class Status
-    {
-        Reset,
-        Initiated,
-        Connected,
-    };
-
-    bool startLoopRunning;
-
-    Status mctpStatus;
 
     // A map from root bus number to the Worker
     // This map means to reuse the same worker for all NVMe EP under the same

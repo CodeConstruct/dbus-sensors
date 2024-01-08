@@ -7,9 +7,11 @@
 
 #include <boost/endian.hpp>
 
+#include <cassert>
 #include <cerrno>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 
 std::map<int, std::weak_ptr<NVMeMi::Worker>> NVMeMi::workerMap{};
 
@@ -28,8 +30,8 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
                int addr, bool singleThreadMode, PowerState readState) :
     io(io),
     conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState),
-    nvmeEP(nullptr), nid(-1), eid(0), mtu(64), startLoopRunning(false),
-    mctpStatus(Status::Reset)
+    mctpStatus(Status::Reset), nid(-1), eid(0), mtu(64), nvmeEP(nullptr),
+    startLoopRunning(false)
 {
     // set update the worker thread
     if (!nvmeRoot)
@@ -81,6 +83,155 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
     }
 }
 
+void NVMeMi::epReset()
+{
+    Status curr = mctpStatus;
+    nvme_mi_ep_t ep = nvmeEP;
+
+    mctpStatus = Status::Reset;
+
+    switch (curr)
+    {
+        case Status::Reset:
+            return;
+        case Status::Configured:
+            nid = -1;
+            eid = 0;
+            mtu = 64;
+            mctpPath = nullptr;
+            mctpStatus = Status::Reset;
+            return;
+        case Status::Initiated:
+        case Status::Connected:
+            if (ep == nullptr)
+            {
+                throw std::logic_error(
+                    "nvmeEP was unpopulated in Status::Initiated state");
+            }
+            // Invoke nvme_mi_close() via a lambda that we schedule via
+            // flushOperations(). Using flushOperations() ensures that any
+            // outstanding tasks are executed before nvme_mi_close() is invoked,
+            // invalidating their controller reference.
+            std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
+                      << "start MCTP closure" << std::endl;
+            flushOperations([self{shared_from_this()}]() {
+                nvme_mi_close(self->nvmeEP);
+                self->nid = -1;
+                self->eid = 0;
+                self->mtu = 64;
+                self->mctpPath.erase();
+                self->nvmeEP = nullptr;
+                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
+                          << "] "
+                          << "end MCTP closure" << std::endl;
+            });
+            return;
+    }
+    throw std::logic_error("Unreachable");
+}
+
+void NVMeMi::epConfigure(int lnid, uint8_t leid, const std::string& lpath)
+{
+    switch (mctpStatus)
+    {
+        case Status::Reset:
+        case Status::Configured:
+            /* We can change the configuration while we're not connected */
+            nid = lnid;
+            eid = leid;
+            mctpPath = lpath;
+            mctpStatus = Status::Configured;
+            return;
+        case Status::Initiated:
+            throw std::logic_error(
+                "configure called from Status::Initiated state");
+        case Status::Connected:
+            throw std::logic_error(
+                "configure called from Status::Connected state");
+    }
+}
+
+bool NVMeMi::epConnect()
+{
+    switch (mctpStatus)
+    {
+        case Status::Reset:
+            throw std::logic_error("connect called from Status::Reset state");
+        case Status::Configured:
+            if (nvmeEP != nullptr)
+            {
+                throw std::logic_error(
+                    "nvmeEP populated in Status::Configured state");
+            }
+            nvmeEP = nvme_mi_open_mctp(nvmeRoot, nid, eid);
+            if (nvmeEP != nullptr)
+            {
+                mctpStatus = Status::Initiated;
+                return true;
+            }
+            return false;
+        case Status::Initiated:
+        case Status::Connected:
+            return true;
+    }
+    throw std::logic_error("Unreachable");
+}
+
+void NVMeMi::epOptimize()
+{
+    switch (mctpStatus)
+    {
+        case Status::Reset:
+            throw std::logic_error("optimize called from Status::Reset");
+        case Status::Configured:
+            throw std::logic_error("optimize called from Status::Configured");
+        case Status::Initiated:
+            /* Continue with optimization below */
+            break;
+        case Status::Connected:
+            /* Already optimized */
+            return;
+    }
+
+    startLoopRunning = true;
+    auto timer = std::make_shared<boost::asio::steady_timer>(
+        io, std::chrono::milliseconds(500));
+    timer->async_wait([this, timer](boost::system::error_code ec) {
+        if (ec)
+        {
+            startLoopRunning = false;
+            return;
+        }
+        unsigned timeout = nvme_mi_ep_get_timeout(nvmeEP);
+        nvme_mi_ep_set_timeout(nvmeEP, initCmdTimeoutMS);
+        miSetMCTPConfiguration(
+            [timeout, self{shared_from_this()}](const std::error_code& ec) {
+            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
+            if (ec)
+            {
+                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
+                          << "]"
+                          << "Failed setting up MTU for the MCTP endpoint. "
+                          << std::to_string(self->nid) + ":" +
+                                 std::to_string(self->eid)
+                          << std::endl;
+                self->startLoopRunning = false;
+                self->start();
+                return;
+            }
+            auto rc = self->configureLocalRouteMtu();
+            if (rc)
+            {
+                self->startLoopRunning = false;
+                self->start();
+                return;
+            }
+            self->startLoopRunning = false;
+            self->mctpStatus = Status::Connected;
+        });
+    });
+}
+
 void NVMeMi::start()
 {
     // Already in start loop
@@ -100,6 +251,10 @@ void NVMeMi::start()
         {
             try
             {
+                int lnid = 0;
+                uint8_t leid = 0;
+                std::string lpath;
+
                 auto msg = dbus.new_method_call(
                     "xyz.openbmc_project.MCTP", "/xyz/openbmc_project/mctp",
                     "au.com.CodeConstruct.MCTP", "SetupEndpoint");
@@ -108,9 +263,10 @@ void NVMeMi::start()
                 msg.append(std::vector<uint8_t>{static_cast<uint8_t>(addr)});
                 auto reply = msg.call(); // throw SdBusError
 
-                reply.read(eid);
-                reply.read(nid);
-                reply.read(mctpPath);
+                reply.read(leid);
+                reply.read(lnid);
+                reply.read(lpath);
+                epConfigure(lnid, leid, lpath);
                 break;
             }
             catch (const std::exception& e)
@@ -123,12 +279,7 @@ void NVMeMi::start()
                 }
                 else
                 {
-                    mctpStatus = Status::Reset;
-                    nid = -1;
-                    eid = 0;
-                    mtu = 64;
-                    mctpPath.erase();
-                    nvmeEP = nullptr;
+                    epReset();
                     std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
                               << "fail to init MCTP endpoint: " << e.what()
                               << std::endl;
@@ -136,105 +287,26 @@ void NVMeMi::start()
                 }
             }
         }
+
         // open mctp endpoint
-        nvmeEP = nvme_mi_open_mctp(nvmeRoot, nid, eid);
-        if (nvmeEP == nullptr)
+        if (!epConnect())
         {
-            mctpStatus = Status::Reset;
-            nid = -1;
-            eid = 0;
-            mtu = 64;
-            // MCTPd won't expect to delete the ep object, just to erase the
-            // record here.
-            mctpPath.erase();
-            nvmeEP = nullptr;
+            epReset();
             std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
                       << "can't open MCTP endpoint "
                       << std::to_string(nid) + ":" + std::to_string(eid)
                       << std::endl;
             return;
         }
-        // TODO: make a flag to indicate the next health poll should return
-        // no_such_device error. This is to inform the subsystem that the
-        // connected has been reset or hot-swapped.
-
-        mctpStatus = Status::Initiated;
     }
 
-    if (mctpStatus == Status::Initiated)
-    {
-        startLoopRunning = true;
-        auto timer = std::make_shared<boost::asio::steady_timer>(
-            io, std::chrono::milliseconds(500));
-        timer->async_wait([this, timer](boost::system::error_code ec) {
-            if (ec)
-            {
-                startLoopRunning = false;
-                return;
-            }
-            unsigned timeout = nvme_mi_ep_get_timeout(nvmeEP);
-            nvme_mi_ep_set_timeout(nvmeEP, initCmdTimeoutMS);
-            miSetMCTPConfiguration(
-                [timeout, self{shared_from_this()}](const std::error_code& ec) {
-                nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
-                if (ec)
-                {
-                    std::cerr << "[bus: " << self->bus
-                              << ", addr: " << self->addr << "]"
-                              << "Failed setting up MTU for the MCTP endpoint. "
-                              << std::to_string(self->nid) + ":" +
-                                     std::to_string(self->eid)
-                              << std::endl;
-                    self->startLoopRunning = false;
-                    self->start();
-                    return;
-                }
-                auto rc = self->configureLocalRouteMtu();
-                if (rc)
-                {
-                    self->startLoopRunning = false;
-                    self->start();
-                    return;
-                }
-                self->startLoopRunning = false;
-                self->mctpStatus = Status::Connected;
-            });
-        });
-    }
+    epOptimize();
 }
 
 void NVMeMi::stop()
 {
-    if (mctpStatus == Status::Reset)
-    {
-        return;
-    }
-
-    // Note: No need to remove MCTP ep from MCTPd since the routing table will
-    // re-establish on the next init
-
-    // Invoke nvme_mi_close() via a lambda that we schedule via
-    // flushOperations(). Using flushOperations() ensures that any outstanding
-    // tasks are executed before nvme_mi_close() is invoked, invalidating their
-    // controller reference.
-    auto closeTask [[maybe_unused]] = [self{shared_from_this()}]() {
-        nvme_mi_close(self->nvmeEP);
-        self->nid = -1;
-        self->eid = 0;
-        self->mtu = 64;
-        self->mctpPath.erase();
-        self->nvmeEP = nullptr;
-        std::cerr << "[bus: " << self->bus << ", addr: " << self->addr << "]: "
-                  << "end MCTP closure" << std::endl;
-    };
-
-    // Mark connectivity as disabled for the purpose of the MI tranpsort. This
-    // prevents further queuing of jobs into the worker thread.
-    mctpStatus = Status::Reset;
-
-    // Now that further tasks can no-longer be queued, trigger the close of
-    // the endpoint
-    flushOperations(std::move(closeTask));
+    std::unique_lock<std::mutex> lock(mctpMtx);
+    epReset();
 }
 
 bool NVMeMi::isMCTPconnect() const
