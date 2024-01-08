@@ -182,8 +182,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     bool restart;
     bool startLoopRunning;
 
-    std::mutex mctpMtx;
-
     // A worker thread for calling NVMeMI cmd.
     class Worker
     {

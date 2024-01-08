@@ -255,7 +255,6 @@ void NVMeMi::start()
     if (mctpStatus == Status::Reset)
     {
         // init mctp ep via mctpd
-        std::unique_lock<std::mutex> lock(mctpMtx);
         std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
                   << "start MCTP initialization" << std::endl;
         int i = 0;
@@ -320,7 +319,6 @@ void NVMeMi::start()
 
 void NVMeMi::stop()
 {
-    std::unique_lock<std::mutex> lock(mctpMtx);
     restart = false;
     epReset();
 }
@@ -417,11 +415,8 @@ void NVMeMi::Worker::post(std::function<void(void)>&& func)
 
 void NVMeMi::post(std::function<void(void)>&& func)
 {
-    worker->post(
-        [self{std::move(shared_from_this())}, func{std::move(func)}]() {
-        std::unique_lock<std::mutex> lock(self->mctpMtx);
-        func();
-    });
+    worker->post([self{std::move(shared_from_this())},
+                  func{std::move(func)}]() { func(); });
 }
 
 // Calls .post(), catching runtime_error and returning an error code on failure.
