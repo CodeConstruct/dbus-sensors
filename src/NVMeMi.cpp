@@ -129,12 +129,12 @@ void NVMeMi::start()
                 }
                 else
                 {
+                    mctpStatus = Status::Reset;
                     nid = -1;
                     eid = 0;
                     mtu = 64;
                     mctpPath.erase();
                     nvmeEP = nullptr;
-                    mctpStatus = Status::Reset;
                     std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
                               << "fail to init MCTP endpoint: " << e.what()
                               << std::endl;
@@ -146,6 +146,7 @@ void NVMeMi::start()
         nvmeEP = nvme_mi_open_mctp(nvmeRoot, nid, eid);
         if (nvmeEP == nullptr)
         {
+            mctpStatus = Status::Reset;
             nid = -1;
             eid = 0;
             mtu = 64;
@@ -153,7 +154,6 @@ void NVMeMi::start()
             // record here.
             mctpPath.erase();
             nvmeEP = nullptr;
-            mctpStatus = Status::Reset;
             std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
                       << "can't open MCTP endpoint "
                       << std::to_string(nid) + ":" + std::to_string(eid)
@@ -226,12 +226,12 @@ void NVMeMi::stop()
     // Note: No need to remove MCTP ep from MCTPd since the routing table will
     // re-establish on the next init
 
+    mctpStatus = Status::Reset;
     nid = -1;
     eid = 0;
     mtu = 64;
     mctpPath.erase();
     nvmeEP = nullptr;
-    mctpStatus = Status::Reset;
     std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
               << "finish MCTP closure." << std::endl;
 }
