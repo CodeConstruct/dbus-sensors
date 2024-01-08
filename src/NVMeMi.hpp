@@ -146,22 +146,14 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
      *   [*] --> Reset
      *
      *   Reset --> Reset: epReset()
-     *   Reset --> Configured: epConfigure()
      *   Reset --> [*]: epConnect()
      *   Reset --> [*]: epOptimize()
      *
-     *   Configured --> Reset: epReset()
-     *   Configured --> Configured: epConfigure()
-     *   Configured --> Initiated: epConnect()
-     *   Configured --> [*]: epOptimize()
-     *
      *   Initiated --> Terminating: epReset()
-     *   Initiated --> [*]: epConfigure()
      *   Initiated --> Initiated: epConnect()
      *   Initiated --> Connected: epOptimize()
      *
      *   Connected --> Terminating: epReset()
-     *   Connected --> [*]: epConfigure()
      *   Connected --> Connected: epConnect()
      *   Connected --> Connected: epOptimize()
      *
@@ -173,15 +165,13 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     enum class Status
     {
         Reset,
-        Configured,
         Initiated,
         Connected,
         Terminating,
     };
 
     void epReset();
-    void epConfigure(int lnid, uint8_t leid);
-    bool epConnect();
+    bool epConnect(int lnid, uint8_t leid);
     void epOptimize();
 
     Status mctpStatus;

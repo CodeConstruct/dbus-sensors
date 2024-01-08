@@ -63,12 +63,6 @@ void NVMeMi::epReset()
     {
         case Status::Reset:
             return;
-        case Status::Configured:
-            nid = -1;
-            eid = 0;
-            mtu = 64;
-            mctpStatus = Status::Reset;
-            return;
         case Status::Initiated:
         case Status::Connected:
             if (nvmeEP == nullptr)
@@ -112,41 +106,18 @@ void NVMeMi::epReset()
     throw std::logic_error("Unreachable");
 }
 
-void NVMeMi::epConfigure(int lnid, uint8_t leid)
+bool NVMeMi::epConnect(int lnid, uint8_t leid)
 {
     switch (mctpStatus)
     {
         case Status::Reset:
-        case Status::Configured:
-            /* We can change the configuration while we're not connected */
-            nid = lnid;
-            eid = leid;
-            mctpStatus = Status::Configured;
-            return;
-        case Status::Initiated:
-            throw std::logic_error(
-                "configure called from Status::Initiated state");
-        case Status::Connected:
-            throw std::logic_error(
-                "configure called from Status::Connected state");
-        case Status::Terminating:
-            throw std::logic_error(
-                "configure called from Status::Terminating state");
-    }
-}
-
-bool NVMeMi::epConnect()
-{
-    switch (mctpStatus)
-    {
-        case Status::Reset:
-            throw std::logic_error("connect called from Status::Reset state");
-        case Status::Configured:
             if (nvmeEP != nullptr)
             {
                 throw std::logic_error(
-                    "nvmeEP populated in Status::Configured state");
+                    "nvmeEP populated in Status::Reset state");
             }
+            nid = lnid;
+            eid = leid;
             nvmeEP = nvme_mi_open_mctp(nvmeRoot, nid, eid);
             if (nvmeEP != nullptr)
             {
@@ -170,8 +141,6 @@ void NVMeMi::epOptimize()
     {
         case Status::Reset:
             throw std::logic_error("optimize called from Status::Reset");
-        case Status::Configured:
-            throw std::logic_error("optimize called from Status::Configured");
         case Status::Initiated:
             /* Continue with optimization below */
             break;
@@ -269,10 +238,8 @@ void NVMeMi::start(int network, std::uint8_t eid)
 
     if (mctpStatus == Status::Reset)
     {
-        epConfigure(network, eid);
-
         // open mctp endpoint
-        if (!epConnect())
+        if (!epConnect(network, eid))
         {
             epReset();
             std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
@@ -300,7 +267,6 @@ std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
     switch (mctpStatus)
     {
         case Status::Reset:
-        case Status::Configured:
             return std::make_error_code(std::errc::no_such_device);
         case Status::Initiated:
             return std::make_error_code(std::errc::not_connected);
