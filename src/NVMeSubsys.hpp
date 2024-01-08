@@ -113,6 +113,7 @@ class NVMeSubsystem :
     std::shared_ptr<NVMeSensor> ctemp;
     std::shared_ptr<boost::asio::steady_timer> ctempTimer;
 
+    bool isPresent;
     /*
     Drive interface: xyz.openbmc_project.Inventory.Item.Drive
     */
@@ -145,6 +146,8 @@ class NVMeSubsystem :
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
 
+    std::shared_ptr<sdbusplus::asio::dbus_interface> presentIntf;
+
     void createAssociation();
     void updateAssociation();
     std::vector<Association> makeAssociation() const;
@@ -168,6 +171,9 @@ class NVMeSubsystem :
                               NVMeNSIdentify ns);
 
     void addIdentifyNamespace(uint32_t nsid);
+
+    void checkPresence();
+    void updatePresence(const std::error_code& ec, bool present);
 
     void fillDrive();
     void updateVolumes();

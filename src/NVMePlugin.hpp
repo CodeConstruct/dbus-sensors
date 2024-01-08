@@ -42,12 +42,21 @@ class NVMeControllerPlugin
         return {};
     }
 
+    // Returns present by default. The implementation can be overridden in
+    // subclass.
+    virtual void checkPresent(
+        std::function<void(const std::error_code&, bool present)>&& cb)
+    {
+        cb({}, true);
+    }
+
+    bool isPrimary() const;
+
   protected:
     const std::string& getPath() const;
     sdbusplus::asio::object_server& getDbusServer();
     std::shared_ptr<sdbusplus::asio::connection> getDbusConnection();
     boost::asio::io_context& getIOContext();
-    bool isPrimary() const;
 
     /**
      * adminXfer() -  transfer Raw admin cmd to the binded conntroller

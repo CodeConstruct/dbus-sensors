@@ -80,7 +80,7 @@ NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
     NVMeStorage(objServer, *dynamic_cast<sdbusplus::bus_t*>(conn.get()),
                 path.c_str()),
     path(path), io(io), objServer(objServer), conn(conn), name(name),
-    config(configData), nvmeIntf(intf), status(Status::Stop)
+    config(configData), nvmeIntf(intf), status(Status::Stop), isPresent(false)
 {}
 
 // Performs initialisation after shared_from_this() has been set up.
@@ -107,12 +107,6 @@ void NVMeSubsystem::init()
     NVMeStorage::init(
         std::static_pointer_cast<NVMeStorage>(shared_from_this()));
 
-    /* xyz.openbmc_project.Inventory.Item.Drive */
-    drive = std::make_shared<NVMeDrive>(io, conn, path, weak_from_this());
-    drive->protocol(NVMeDrive::DriveProtocol::NVMe);
-    drive->type(NVMeDrive::DriveType::SSD);
-    // TODO: update capacity
-
     // make association for Drive/Storage/Chassis
     createAssociation();
 }
@@ -120,6 +114,71 @@ void NVMeSubsystem::init()
 NVMeSubsystem::~NVMeSubsystem()
 {
     objServer.remove_interface(assocIntf);
+    objServer.remove_interface(presentIntf);
+}
+
+void NVMeSubsystem::updatePresence(const std::error_code& ec, bool present)
+{
+    if (ec)
+    {
+        std::cerr << name << " plugin checkPresence failed: " << ec.message()
+                  << std::endl;
+        isPresent = false;
+    }
+    else
+    {
+        isPresent = present;
+    }
+
+    // DBus Interface: xyz.openbmc_project.Inventory.Item
+    if (!presentIntf)
+    {
+        presentIntf =
+            objServer.add_interface(path, "xyz.openbmc_project.Inventory.Item");
+        presentIntf->register_property("Present", isPresent);
+        presentIntf->initialize();
+    }
+    else
+    {
+        presentIntf->set_property("Present", isPresent);
+    }
+
+    std::cerr << name << " drive isPresent: " << isPresent << std::endl;
+
+    // DBus Interface: xyz.openbmc_project.Inventory.Item.Drive
+    if (!drive)
+    {
+        drive = std::make_shared<NVMeDrive>(io, conn, path, weak_from_this());
+        drive->protocol(NVMeDrive::DriveProtocol::NVMe);
+        drive->type(NVMeDrive::DriveType::SSD);
+    }
+    fillDrive();
+}
+
+void NVMeSubsystem::checkPresence()
+{
+    bool findPlugin = false;
+    // find primary controller plugin and checkPresent
+    for (auto& [_, pair] : controllers)
+    {
+        std::shared_ptr<NVMeControllerPlugin> ctrlPlugin = pair.second;
+        if (ctrlPlugin && ctrlPlugin->isPrimary())
+        {
+            ctrlPlugin->checkPresent(
+                [self{shared_from_this()}](const std::error_code& ec,
+                                           bool present) {
+                self->updatePresence(ec, present);
+            });
+            findPlugin = true;
+            break;
+        }
+    }
+
+    if (!findPlugin)
+    {
+        // Assumes present in case we didn't find any (primary) plugin
+        updatePresence({}, true);
+    }
 }
 
 void NVMeSubsystem::processSecondaryControllerList(
@@ -193,7 +252,7 @@ void NVMeSubsystem::processSecondaryControllerList(
     }
     status = Status::Start;
 
-    fillDrive();
+    checkPresence();
 
     // TODO: may need to wait for this to complete?
     updateVolumes();
