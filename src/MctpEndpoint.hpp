@@ -1,11 +1,13 @@
 #pragma once
 
+#include <boost/asio/steady_timer.hpp>
 #include <sdbusplus/asio/connection.hpp>
 #include <sdbusplus/bus/match.hpp>
 #include <sdbusplus/message.hpp>
 #include <sdbusplus/message/native_types.hpp>
 
 #include <cstdint>
+#include <iostream>
 
 /**
  * @file
@@ -272,4 +274,188 @@ class SmbusMctpdDevice : public MctpdDevice
   private:
     const int smbus;
     const uint8_t smdev;
+};
+
+/**
+ * @brief Unify over devices whose presence is asserted by the platform
+ *        configuration but whose endpoints are implicitly polled vs requiring
+ *        explicit polling.
+ *
+ * The lifetime of StaticEntity is bounded by the assertion of the presence of a
+ * device. Assertion of the presence of a device may come from a configuration
+ * source such as EntityManager.
+ *
+ * The assertion of the presence of the device may not actually be correlated
+ * with the physical presence of a device, for example due to hotplug events
+ * where there's no out-of-band mechanism for detecting the hotplug. The
+ * lifetime of a StaticEntity instance is proportional to the existence of the
+ * assertion, not the existence of the device.
+ *
+ * Concretely, EntityManager may expose configurations describing an NVMe drive.
+ * Communication with the drive may either be via the NVMe MI basic management
+ * command (a raw SMBus block read) or via the full MI protocol over MCTP.
+ *
+ * Communication via MCTP first requires the device be configured as an MCTP
+ * endpoint. Without successful configuration of the endpoint we cannot talk
+ * NVMe MI via MCTP to the device. If the device is absent then we need to
+ * explicitly poll at the MCTP layer until the endpoint setup succeeds before we
+ * proceed to talk NVMe MI.
+ *
+ * By contrast, the NVMe MI basic management command requires no initial setup.
+ * The polling is implicit in attempting the SMBus block read that yields the
+ * drive health data.
+ *
+ * StaticEntity provides a container class to hold the instance of the
+ * upper-layer representation of the endpoint regardless of the mechanism to
+ * instantiate it. Subclasses can be defined for upper-layer objects that
+ * require defered instantion based on the result of explicit polling.
+ */
+template <typename T>
+class StaticEntity
+{
+  public:
+    StaticEntity() = default;
+    explicit StaticEntity(const std::shared_ptr<T>& upper) : upper(upper){};
+    StaticEntity(StaticEntity<T>&& other) noexcept = default;
+    virtual ~StaticEntity() = default;
+
+    std::shared_ptr<T> get() const
+    {
+        return upper;
+    }
+
+  protected:
+    std::shared_ptr<T> upper{};
+};
+
+/**
+ * @brief A specialisation of StaticEntity that implements explicit polling via
+ *        calls to the @c SetupEndpoint D-Bus method exposed by @c mctpd
+ *
+ * The full endpoint lifecycle is handled by registering for the
+ * @c InterfacesRemoved signal on the endpoint object, signalling the removal to
+ * the upper-layer object prior to its destruction. Once the endpoint is removed
+ * the implementation returns to polling via @c SetupEndpoint.
+ */
+template <typename T>
+class StaticPolledMctpdEntity :
+    public StaticEntity<T>,
+    public std::enable_shared_from_this<StaticPolledMctpdEntity<T>>
+{
+  public:
+    StaticPolledMctpdEntity(
+        boost::asio::io_context& io,
+        const std::shared_ptr<sdbusplus::asio::connection>& connection,
+        const std::shared_ptr<MctpDevice>& device) :
+        connection(connection),
+        device(device), timer(io)
+    {}
+
+    StaticPolledMctpdEntity(StaticPolledMctpdEntity<T>&& other) noexcept =
+        default;
+    ~StaticPolledMctpdEntity() override = default;
+
+    void poll(std::function<std::shared_ptr<T>(
+                  const std::shared_ptr<MctpEndpoint>& ep)>&& action)
+    {
+        device->setup([weak{this->weak_from_this()}, action{std::move(action)}](
+                          const std::error_code& ec,
+                          const std::shared_ptr<MctpEndpoint>& ep) mutable {
+            auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+
+            if (ec)
+            {
+                self->timer.expires_after(period);
+                self->timer.async_wait(
+                    [weak{self->weak_from_this()}, action{std::move(action)}](
+                        const boost::system::error_code& ec) mutable {
+                    if (ec)
+                    {
+                        std::cerr << "Poll timer failure for static MCTP FRU"
+                                  << std::endl;
+                        return;
+                    }
+                    if (auto self = weak.lock())
+                    {
+                        self->poll(std::move(action));
+                    }
+                });
+                return;
+            }
+
+            assert(!!ep);
+
+            const auto objpath = std::string("/xyz/openbmc_project/mctp/")
+                                     .append(std::to_string(ep->network()))
+                                     .append("/")
+                                     .append(std::to_string(ep->eid()));
+            const auto matchType = std::string("type='signal'");
+            const auto matchMember = std::string("member='InterfacesRemoved'");
+            const auto pathNamespace = std::string("arg0path='") + objpath +
+                                       "'";
+            const auto matchSpec = std::string()
+                                       .append(matchType)
+                                       .append(",")
+                                       .append(matchMember)
+                                       .append(",")
+                                       .append(pathNamespace);
+            self->upper = action(ep);
+            if (!self->upper)
+            {
+                /* Avoid destruction from resetting the match */
+                auto localAction = std::move(action);
+                self->removeMatch.reset();
+                self->device->removed();
+                self->poll(std::move(localAction));
+                return;
+            }
+            self->removeMatch.emplace(
+                static_cast<sdbusplus::bus_t&>(*self->connection), matchSpec,
+                [weak{self->weak_from_this()}, action{std::move(action)},
+                 objpath{objpath}](sdbusplus::message_t& msg) mutable {
+                sdbusplus::message::object_path path;
+                msg.read(path);
+
+                if (path.str != objpath)
+                {
+                    return;
+                }
+
+                std::vector<std::string> removed;
+                msg.read(removed);
+
+                for (const auto& iface : removed)
+                {
+                    if (iface != mctpdEndpointControlInterface)
+                    {
+                        continue;
+                    }
+
+                    if (auto self = weak.lock())
+                    {
+                        /* Avoid destruction from resetting the match */
+                        auto localAction = std::move(action);
+                        self->removeMatch.reset();
+                        self->device->removed();
+                        self->upper.reset();
+                        self->poll(std::move(localAction));
+                        return;
+                    }
+                }
+            });
+        });
+    }
+
+  private:
+    static constexpr const char* mctpdEndpointControlInterface =
+        "au.com.CodeConstruct.MCTP.Endpoint";
+    static constexpr auto period = std::chrono::seconds(5);
+    std::shared_ptr<sdbusplus::asio::connection> connection;
+    std::shared_ptr<MctpDevice> device;
+    boost::asio::steady_timer timer;
+    std::optional<sdbusplus::bus::match_t> removeMatch;
 };
