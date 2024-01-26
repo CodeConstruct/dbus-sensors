@@ -549,7 +549,7 @@ void NVMeSubsystem::start()
     {
         auto intf =
             std::get<std::shared_ptr<NVMeBasicIntf>>(nvmeIntf.getInferface());
-        ctemp_fetch_t<NVMeBasicIntf::DriveStatus*> dataFether =
+        ctemp_fetch_t<NVMeBasicIntf::DriveStatus*> dataFetcher =
             [intf, self{std::move(shared_from_this())},
              timer = std::weak_ptr<boost::asio::steady_timer>(ctempTimer)](
                 std::function<void(const std::error_code&,
@@ -611,7 +611,7 @@ void NVMeSubsystem::start()
             self->ctemp->updateValue(getTemperatureReading(status->Temp));
         };
 
-        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFether,
+        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFetcher,
                   dataProcessor);
     }
     else if (nvmeIntf.getProtocol() == NVMeIntf::Protocol::NVMeMI)
@@ -619,7 +619,7 @@ void NVMeSubsystem::start()
         auto intf =
             std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
-        ctemp_fetch_t<nvme_mi_nvm_ss_health_status*> dataFether =
+        ctemp_fetch_t<nvme_mi_nvm_ss_health_status*> dataFetcher =
             [intf, self{std::move(shared_from_this())},
              timer = std::weak_ptr<boost::asio::steady_timer>(ctempTimer)](
                 std::function<void(const std::error_code&,
@@ -712,7 +712,7 @@ void NVMeSubsystem::start()
             return;
         };
 
-        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFether,
+        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFetcher,
                   dataProcessor);
     }
 }
