@@ -236,14 +236,9 @@ bool NVMeMi::isMCTPconnect() const
 
 std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
 {
-    if (!nvmeEP)
-    {
-        return std::make_error_code(std::errc::no_such_device);
-    }
-
     if (!isMCTPconnect())
     {
-        return std::make_error_code(std::errc::not_connected);
+        return std::make_error_code(std::errc::no_such_device);
     }
 
     return std::nullopt;
@@ -339,15 +334,14 @@ void NVMeMi::miConfigureSMBusFrequency(
     uint8_t port_id, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (auto degraded = isEndpointDegraded())
+    if (mctpStatus == Status::Reset)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
+        io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
         });
-        mctpStatus = Status::Reset;
         return;
     }
     try
@@ -402,13 +396,14 @@ void NVMeMi::miConfigureRemoteMCTP(
     uint8_t port, uint16_t mtu, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (auto degraded = isEndpointDegraded())
+    if (mctpStatus == Status::Reset)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc); });
-        mctpStatus = Status::Reset;
+        io.post([cb{std::move(cb)}]() {
+            cb(std::make_error_code(std::errc::no_such_device));
+        });
         return;
     }
     try
@@ -455,13 +450,14 @@ void NVMeMi::miConfigureRemoteMCTP(
 void NVMeMi::miSetMCTPConfiguration(
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (auto degraded = isEndpointDegraded())
+    if (mctpStatus == Status::Reset)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
                   << "nvme endpoint is invalid" << std::endl;
-        io.post([cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc); });
-        mctpStatus = Status::Reset;
+        io.post([cb{std::move(cb)}]() {
+            cb(std::make_error_code(std::errc::no_such_device));
+        });
         return;
     }
     try
