@@ -20,6 +20,7 @@ constexpr size_t maxNVMeMILength = 4096;
 constexpr int tcgDefaultTimeoutMS = 20 * 1000;
 constexpr int namespaceDefaultTimeoutMS = 20 * 1000;
 constexpr int sanitizeDefaultTimeoutMS = 20 * 1000;
+constexpr int downloadDefaultTimeoutMS = 10 * 1000;
 constexpr int initCmdTimeoutMS = 1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
@@ -1397,8 +1398,10 @@ void NVMeMi::adminFwDownloadChunk(
             args.offset = offset;
             args.data_len = data_len;
             args.data = data;
-
+            unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+            nvme_mi_ep_set_timeout(self->nvmeEP, downloadDefaultTimeoutMS);
             int rc = nvme_mi_admin_fw_download(ctrl, &args);
+            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
             if (rc < 0)
             {
                 if (attempt_count > 0)
@@ -1434,8 +1437,11 @@ void NVMeMi::adminFwDownloadChunk(
                 });
                 return;
             }
-            self->adminFwDownloadChunk(ctrl, firmwarefile, size, offset,
-                                       attempt_count, std::move(cb));
+            self->io.post([self, ctrl, firmwarefile, size, offset,
+                           attempt_count, cb{std::move(cb)}]() mutable {
+                self->adminFwDownloadChunk(ctrl, firmwarefile, size, offset,
+                                           attempt_count, std::move(cb));
+            });
         });
     }
     catch (const std::runtime_error& e)
