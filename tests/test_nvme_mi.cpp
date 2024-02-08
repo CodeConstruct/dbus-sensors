@@ -282,7 +282,47 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     EXPECT_EQ(result.size(), 0)
                         << "The following interfaces remain after STOP: \n"
                         << j.dump(2) << std::endl;
-                    io.stop();
+                    // restart the subsystem
+                    subsys->start();
+                    timer.expires_after(std::chrono::seconds(2));
+                    timer.async_wait([&](boost::system::error_code) {
+                        system_bus->async_method_call(
+                            [&](boost::system::error_code,
+                                const GetSubTreeType& result) {
+                            EXPECT_EQ(result.size(), 2);
+
+                            subsys->stop();
+                            // subsys.reset();
+
+                            // wait for storage controller destruction.
+                            timer.expires_after(std::chrono::seconds(1));
+                            timer.async_wait([&](boost::system::error_code) {
+                                system_bus->async_method_call(
+                                    [&](boost::system::error_code,
+                                        const GetSubTreeType& result) {
+                                    // not storage controller should be listed.
+                                    nlohmann::json j(result);
+                                    EXPECT_EQ(result.size(), 0)
+                                        << "The following interfaces remain after STOP: \n"
+                                        << j.dump(2) << std::endl;
+                                    io.stop();
+                                },
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "/xyz/openbmc_project/object_mapper",
+                                    "xyz.openbmc_project.ObjectMapper",
+                                    "GetSubTree", subsys_path, 0,
+                                    std::vector<std::string>{
+                                        "xyz.openbmc_project.Inventory."
+                                        "Item.StorageController"});
+                            });
+                        },
+                            "xyz.openbmc_project.ObjectMapper",
+                            "/xyz/openbmc_project/object_mapper",
+                            "xyz.openbmc_project.ObjectMapper", "GetSubTree",
+                            subsys_path, 0,
+                            std::vector<std::string>{
+                                "xyz.openbmc_project.Inventory.Item.StorageController"});
+                    });
                 },
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
