@@ -2,6 +2,7 @@
 
 #include "VariantVisitors.hpp"
 
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/container/flat_map.hpp>
@@ -215,19 +216,19 @@ inline T loadVariant(const SensorBaseConfigMap& data, const std::string& key)
 
 inline void setReadState(const std::string& str, PowerState& val)
 {
-    if (str == "On")
+    if (boost::iequals(str, "On"))
     {
         val = PowerState::on;
     }
-    else if (str == "BiosPost")
+    else if (boost::iequals(str, "BiosPost"))
     {
         val = PowerState::biosPost;
     }
-    else if (str == "Always")
+    else if (boost::iequals(str, "Always"))
     {
         val = PowerState::always;
     }
-    else if (str == "ChassisOn")
+    else if (boost::iequals(str, "ChassisOn"))
     {
         val = PowerState::chassisOn;
     }

@@ -90,40 +90,6 @@ static std::optional<std::string>
     return std::get<std::string>(findProtocol->second);
 }
 
-static PowerState extractPowerState(const std::string& path,
-                                    const SensorBaseConfigMap& properties)
-{
-    auto find = properties.find("PowerState");
-    if (find == properties.end())
-    {
-        std::cerr << "could not determine configuration of PowerState for "
-                  << path << ", using default\n";
-        // default to always
-        return PowerState::always;
-    }
-    auto res = std::get<std::string>(find->second);
-    if (boost::iequals(res, "on"))
-    {
-        return PowerState::on;
-    }
-    else if (boost::iequals(res, "biosPost"))
-    {
-        return PowerState::biosPost;
-    }
-    else if (boost::iequals(res, "always"))
-    {
-        return PowerState::always;
-    }
-    else if (boost::iequals(res, "chassisOn"))
-    {
-        return PowerState::chassisOn;
-    }
-    // default to always
-    std::cerr << "could not determine config value for PowerState for " << path
-              << ", using default\n";
-    return PowerState::always;
-}
-
 static void handleConfigurations(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objectServer,
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
@@ -199,8 +165,7 @@ static void handleConfigurations(
                 address.emplace(0x1d);
             }
 
-            PowerState powerState = extractPowerState(interfacePath,
-                                                      sensorConfig);
+            PowerState powerState = getPowerState(sensorConfig);
 
             try
             {
