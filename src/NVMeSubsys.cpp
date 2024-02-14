@@ -549,8 +549,24 @@ void NVMeSubsystem::start()
 
     assert(!ctemp && !ctempTimer);
 
+    PowerState powerState = PowerState::always;
+    auto sensorBase = config.find(configInterfaceName(nvme::sensorType));
+    if (sensorBase == config.end())
+    {
+        std::cerr << "Warning: " << name
+                  << ": cannot find sensor config " +
+                         configInterfaceName(nvme::sensorType)
+                  << std::endl;
+    }
+    else
+    {
+        const SensorBaseConfigMap& sensorConfig = sensorBase->second;
+        powerState = getPowerState(sensorConfig);
+    }
+
     ctemp = std::make_shared<NVMeSensor>(objServer, io, conn, *sensorName,
-                                         std::move(sensorThresholds), path);
+                                         std::move(sensorThresholds), path,
+                                         powerState);
     ctempTimer = std::make_shared<boost::asio::steady_timer>(io);
 
     // start to poll value for CTEMP sensor.

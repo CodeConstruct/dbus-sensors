@@ -13,7 +13,7 @@ class NVMeSensor : public Sensor
                std::shared_ptr<sdbusplus::asio::connection>& conn,
                const std::string& sensorName,
                std::vector<thresholds::Threshold>&& thresholds,
-               const std::string& sensorConfiguration);
+               const std::string& sensorConfiguration, PowerState powerState);
     ~NVMeSensor() override;
 
     NVMeSensor& operator=(const NVMeSensor& other) = delete;

@@ -26,10 +26,12 @@ NVMeSensor::NVMeSensor(sdbusplus::asio::object_server& objectServer,
                        std::shared_ptr<sdbusplus::asio::connection>& conn,
                        const std::string& sensorName,
                        std::vector<thresholds::Threshold>&& thresholdsIn,
-                       const std::string& sensorConfiguration) :
+                       const std::string& sensorConfiguration,
+                       PowerState powerState) :
     Sensor(escapeName(sensorName), std::move(thresholdsIn), sensorConfiguration,
            NVMeSensor::sensorType, false, false, maxReading, minReading, conn,
-           PowerState::on),
+           (powerState == PowerState::always ? PowerState::always
+                                             : PowerState::on)),
     objServer(objectServer)
 {
     sensorInterface = objectServer.add_interface(
