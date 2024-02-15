@@ -31,9 +31,6 @@
 using NVMEMap = std::map<std::string, std::shared_ptr<NVMeSubsystem>>;
 static NVMEMap nvmeSubsysMap;
 
-// flag to set a single worker thread for all nvme eps under the same i2c bus
-static bool singleThreadMode = false;
-
 std::unordered_map<std::string, void*> pluginLibMap = {};
 
 static std::optional<int>
@@ -170,8 +167,8 @@ static void handleConfigurations(
             try
             {
                 NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(
-                    io, dbusConnection, *busNumber, *address, singleThreadMode,
-                    powerState);
+                    io, dbusConnection, *busNumber, *address,
+                    singleWorkerFeature, powerState);
 
                 auto nvme = std::get<std::shared_ptr<NVMeMiIntf>>(
                     nvmeMi.getInferface());
@@ -314,6 +311,9 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
 
 int main()
 {
+    if (singleWorkerFeature)
+        std::cerr << "singleWorkerFeature on " << std::endl;
+
     // Load plugin shared libraries
     try
     {
