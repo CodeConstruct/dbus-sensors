@@ -125,8 +125,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
      * In event of successful setup we move from Reset to Configured. If
      * opening the EP is successful from Configured the status will change to
      * Initiated. The status will change to Connected once the MTU of local
-     * and device side MTU and frequency is optimized. In an event of
-     * connection EP closure, the status will move back to Reset.
+     * and device side MTU and frequency is optimized. In an event of connection
+     * EP closure, the status will move back to Reset via Terminating.
      *
      * Transitions to the terminal state indicate a logic error.
      *
@@ -143,15 +143,20 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
      *   Configured --> Initiated: epConnect()
      *   Configured --> [*]: epOptimize()
      *
-     *   Initiated --> Reset: epReset()
+     *   Initiated --> Terminating: epReset()
      *   Initiated --> [*]: epConfigure()
      *   Initiated --> Initiated: epConnect()
      *   Initiated --> Connected: epOptimize()
      *
-     *   Connected --> Reset: epReset()
+     *   Connected --> Terminating: epReset()
      *   Connected --> [*]: epConfigure()
      *   Connected --> Connected: epConnect()
      *   Connected --> Connected: epOptimize()
+     *
+     *   Terminating --> Reset: Reset close job executes
+     *   Terminating --> Terminating: epReset()
+     *   Terminating --> Terminating: epConnect()
+     *   Terminating --> [*]: epOptimize()
      */
     enum class Status
     {
@@ -159,6 +164,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         Configured,
         Initiated,
         Connected,
+        Terminating,
     };
 
     void epReset();
@@ -172,6 +178,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     uint16_t mtu;
     std::string mctpPath;
     nvme_mi_ep_t nvmeEP;
+    // Handle a start() while in Status::Terminating on entry to Status::Reset.
+    bool restart;
     bool startLoopRunning;
 
     std::mutex mctpMtx;
@@ -220,8 +228,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         std::function<void(const std::error_code&)>&& cb);
 
     int configureLocalRouteMtu();
-
-    bool isMCTPconnect() const;
 
     std::optional<std::error_code> isEndpointDegraded() const;
 

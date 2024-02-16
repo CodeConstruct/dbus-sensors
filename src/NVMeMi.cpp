@@ -31,7 +31,7 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
     io(io),
     conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState),
     mctpStatus(Status::Reset), nid(-1), eid(0), mtu(64), nvmeEP(nullptr),
-    startLoopRunning(false)
+    restart(false), startLoopRunning(false)
 {
     // set update the worker thread
     if (!nvmeRoot)
@@ -85,12 +85,7 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
 
 void NVMeMi::epReset()
 {
-    Status curr = mctpStatus;
-    nvme_mi_ep_t ep = nvmeEP;
-
-    mctpStatus = Status::Reset;
-
-    switch (curr)
+    switch (mctpStatus)
     {
         case Status::Reset:
             return;
@@ -103,11 +98,12 @@ void NVMeMi::epReset()
             return;
         case Status::Initiated:
         case Status::Connected:
-            if (ep == nullptr)
+            if (nvmeEP == nullptr)
             {
                 throw std::logic_error(
                     "nvmeEP was unpopulated in Status::Initiated state");
             }
+            mctpStatus = Status::Terminating;
             // Invoke nvme_mi_close() via a lambda that we schedule via
             // flushOperations(). Using flushOperations() ensures that any
             // outstanding tasks are executed before nvme_mi_close() is invoked,
@@ -121,10 +117,18 @@ void NVMeMi::epReset()
                 self->mtu = 64;
                 self->mctpPath.erase();
                 self->nvmeEP = nullptr;
+                self->mctpStatus = Status::Reset;
                 std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
                           << "] "
                           << "end MCTP closure" << std::endl;
+                if (self->restart)
+                {
+                    self->restart = false;
+                    self->start();
+                }
             });
+            return;
+        case Status::Terminating:
             return;
     }
     throw std::logic_error("Unreachable");
@@ -148,6 +152,9 @@ void NVMeMi::epConfigure(int lnid, uint8_t leid, const std::string& lpath)
         case Status::Connected:
             throw std::logic_error(
                 "configure called from Status::Connected state");
+        case Status::Terminating:
+            throw std::logic_error(
+                "configure called from Status::Terminating state");
     }
 }
 
@@ -173,6 +180,9 @@ bool NVMeMi::epConnect()
         case Status::Initiated:
         case Status::Connected:
             return true;
+        case Status::Terminating:
+            // This isn't an error so much as we're just not ready yet
+            return false;
     }
     throw std::logic_error("Unreachable");
 }
@@ -191,6 +201,8 @@ void NVMeMi::epOptimize()
         case Status::Connected:
             /* Already optimized */
             return;
+        case Status::Terminating:
+            throw std::logic_error("optimize called from Status::Terminating");
     }
 
     startLoopRunning = true;
@@ -234,9 +246,9 @@ void NVMeMi::epOptimize()
 
 void NVMeMi::start()
 {
-    // Already in start loop
-    if (startLoopRunning)
+    if (mctpStatus == Status::Terminating)
     {
+        restart = true;
         return;
     }
 
@@ -300,28 +312,34 @@ void NVMeMi::start()
         }
     }
 
-    epOptimize();
+    if (mctpStatus == Status::Initiated && !startLoopRunning)
+    {
+        epOptimize();
+    }
 }
 
 void NVMeMi::stop()
 {
     std::unique_lock<std::mutex> lock(mctpMtx);
+    restart = false;
     epReset();
-}
-
-bool NVMeMi::isMCTPconnect() const
-{
-    return mctpStatus == Status::Connected;
 }
 
 std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
 {
-    if (!isMCTPconnect())
+    switch (mctpStatus)
     {
-        return std::make_error_code(std::errc::no_such_device);
+        case Status::Reset:
+        case Status::Configured:
+            return std::make_error_code(std::errc::no_such_device);
+        case Status::Initiated:
+            return std::make_error_code(std::errc::not_connected);
+        case Status::Connected:
+            return std::nullopt;
+        case Status::Terminating:
+            return std::make_error_code(std::errc::not_connected);
     }
-
-    return std::nullopt;
+    throw std::logic_error("Unreachable");
 }
 
 NVMeMi::Worker::Worker()
@@ -427,7 +445,7 @@ void NVMeMi::miConfigureSMBusFrequency(
     uint8_t port_id, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (mctpStatus == Status::Reset)
+    if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
@@ -489,7 +507,7 @@ void NVMeMi::miConfigureRemoteMCTP(
     uint8_t port, uint16_t mtu, uint8_t max_supported_freq,
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (mctpStatus == Status::Reset)
+    if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
@@ -543,7 +561,7 @@ void NVMeMi::miConfigureRemoteMCTP(
 void NVMeMi::miSetMCTPConfiguration(
     std::function<void(const std::error_code&)>&& cb)
 {
-    if (mctpStatus == Status::Reset)
+    if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
         std::cerr << "[bus: " << bus << ", addr: " << addr
                   << ", eid: " << static_cast<int>(eid) << "]"
