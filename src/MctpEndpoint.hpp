@@ -45,6 +45,8 @@ class MctpException : public std::exception
 class MctpEndpoint
 {
   public:
+    virtual ~MctpEndpoint() = default;
+
     /**
      * @return The Linux network ID of the network in which the endpoint
                participates
@@ -126,6 +128,8 @@ class MctpEndpoint
 class MctpDevice
 {
   public:
+    virtual ~MctpDevice() = default;
+
     /**
      * @brief Configure the device for MCTP communication
      *
@@ -176,7 +180,7 @@ class MctpdEndpoint :
         sdbusplus::message::object_path objpath, int network, uint8_t eid);
     MctpdEndpoint& McptdEndpoint(const MctpdEndpoint& other) = delete;
     MctpdEndpoint(MctpdEndpoint&& other) noexcept = default;
-    virtual ~MctpdEndpoint() = default;
+    ~MctpdEndpoint() override = default;
 
     int network() const override;
     uint8_t eid() const override;
@@ -235,7 +239,7 @@ class MctpdDevice :
                 const std::vector<uint8_t>& physaddr);
     MctpdDevice(const MctpdDevice& other) = delete;
     MctpdDevice(MctpdDevice&& other) = delete;
-    virtual ~MctpdDevice() = default;
+    ~MctpdDevice() override = default;
 
     void setup(std::function<void(const std::error_code& ec,
                                   const std::shared_ptr<MctpEndpoint>& ep)>&&
