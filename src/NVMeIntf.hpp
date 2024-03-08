@@ -161,8 +161,6 @@ class NVMeMiIntf
         return "";
     }
 
-    virtual int getNID() const = 0;
-    virtual int getEID() const = 0;
     virtual void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,
                            nvme_mi_nvm_ss_health_status*)>&& cb) = 0;

@@ -33,14 +33,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
            PowerState readState = PowerState::always);
     ~NVMeMi() override;
 
-    int getNID() const override
-    {
-        return nid;
-    }
-    int getEID() const override
-    {
-        return eid;
-    }
     bool flushOperations(std::function<void()>&& cb) override;
     void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,

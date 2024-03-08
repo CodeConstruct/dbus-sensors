@@ -87,16 +87,6 @@ class NVMeMiFake :
         thread.join();
     }
 
-    int getNID() const override
-    {
-        return 0;
-    }
-
-    int getEID() const override
-    {
-        return 0;
-    }
-
     void start() override {}
 
     void miSubsystemHealthStatusPoll(
