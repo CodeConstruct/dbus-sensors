@@ -186,7 +186,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     };
 
     void epReset();
-    void epConfigure(int lnid, uint8_t leid, const std::string& lpath);
+    void epConfigure(int lnid, uint8_t leid);
     bool epConnect();
     void epOptimize();
 
@@ -194,7 +194,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     int nid;
     uint8_t eid;
     uint16_t mtu;
-    std::string mctpPath;
     nvme_mi_ep_t nvmeEP;
     // Handle a start() while in Status::Terminating on entry to Status::Reset.
     bool restart;

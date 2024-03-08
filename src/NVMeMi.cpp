@@ -67,7 +67,6 @@ void NVMeMi::epReset()
             nid = -1;
             eid = 0;
             mtu = 64;
-            mctpPath = nullptr;
             mctpStatus = Status::Reset;
             return;
         case Status::Initiated:
@@ -89,7 +88,6 @@ void NVMeMi::epReset()
                 self->nid = -1;
                 self->eid = 0;
                 self->mtu = 64;
-                self->mctpPath.erase();
                 self->nvmeEP = nullptr;
                 self->mctpStatus = Status::Reset;
                 std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
@@ -108,7 +106,7 @@ void NVMeMi::epReset()
     throw std::logic_error("Unreachable");
 }
 
-void NVMeMi::epConfigure(int lnid, uint8_t leid, const std::string& lpath)
+void NVMeMi::epConfigure(int lnid, uint8_t leid)
 {
     switch (mctpStatus)
     {
@@ -117,7 +115,6 @@ void NVMeMi::epConfigure(int lnid, uint8_t leid, const std::string& lpath)
             /* We can change the configuration while we're not connected */
             nid = lnid;
             eid = leid;
-            mctpPath = lpath;
             mctpStatus = Status::Configured;
             return;
         case Status::Initiated:
@@ -238,7 +235,6 @@ void NVMeMi::start()
             {
                 int lnid = 0;
                 uint8_t leid = 0;
-                std::string lpath;
 
                 auto msg = dbus.new_method_call(
                     "xyz.openbmc_project.MCTP", "/xyz/openbmc_project/mctp",
@@ -250,8 +246,7 @@ void NVMeMi::start()
 
                 reply.read(leid);
                 reply.read(lnid);
-                reply.read(lpath);
-                epConfigure(lnid, leid, lpath);
+                epConfigure(lnid, leid);
                 break;
             }
             catch (const std::exception& e)
