@@ -28,7 +28,7 @@ class NVMeSubsystem :
                const std::string& path, const std::string& name,
                const SensorData& configData, NVMeIntf intf);
 
-    ~NVMeSubsystem();
+    ~NVMeSubsystem() override;
 
     void start();
 
