@@ -108,7 +108,9 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                        uint8_t passes, uint32_t pattern, bool invert_pattern,
                        std::function<void(nvme_ex_ptr ex)>&& cb) override;
 
+    void start(int network, std::uint8_t eid) override;
     void start() override;
+    void stop() override;
 
   private:
     // the transfer size for nvme mi messages.
@@ -193,8 +195,6 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     std::shared_ptr<NVMeMiWorker> worker;
     void post(std::function<void(void)>&& func);
-
-    void stop();
 
     void
         miConfigureRemoteMCTP(uint8_t port, uint16_t mtu,

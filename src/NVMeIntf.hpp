@@ -170,6 +170,8 @@ class NVMeMiIntf
                        cb) = 0;
 
     virtual void start() = 0;
+    virtual void start(int network, std::uint8_t eid) = 0;
+    virtual void stop() = 0;
 
     virtual ~NVMeMiIntf() = default;
 

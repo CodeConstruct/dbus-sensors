@@ -88,6 +88,10 @@ class NVMeMiFake :
     }
 
     void start() override {}
+    void start(int network [[maybe_unused]],
+               uint8_t eid [[maybe_unused]]) override
+    {}
+    void stop() override {}
 
     void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,

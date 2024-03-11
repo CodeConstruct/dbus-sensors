@@ -77,6 +77,11 @@ void NVMeMi::epReset()
                     "nvmeEP was unpopulated in Status::Initiated state");
             }
             mctpStatus = Status::Terminating;
+            // Immediately reset nid and eid so that we can capture the values
+            // from a subsequent invocation of start() while in
+            // Status::Terminating
+            nid = -1;
+            eid = 0;
             // Invoke nvme_mi_close() via a lambda that we schedule via
             // flushOperations(). Using flushOperations() ensures that any
             // outstanding tasks are executed before nvme_mi_close() is invoked,
@@ -85,8 +90,6 @@ void NVMeMi::epReset()
                       << "start MCTP closure" << std::endl;
             flushOperations([self{shared_from_this()}]() {
                 nvme_mi_close(self->nvmeEP);
-                self->nid = -1;
-                self->eid = 0;
                 self->mtu = 64;
                 self->nvmeEP = nullptr;
                 self->mctpStatus = Status::Reset;
@@ -95,8 +98,11 @@ void NVMeMi::epReset()
                           << "end MCTP closure" << std::endl;
                 if (self->restart)
                 {
+                    // If restart is true then we've captured the updated
+                    // network and EID values in the respective members. We pass
+                    // these to start() to recreate the connection.
                     self->restart = false;
-                    self->start();
+                    self->start(self->nid, self->eid);
                 }
             });
             return;
@@ -199,14 +205,14 @@ void NVMeMi::epOptimize()
                                  std::to_string(self->eid)
                           << std::endl;
                 self->startLoopRunning = false;
-                self->start();
+                self->start(self->nid, self->eid);
                 return;
             }
             auto rc = self->configureLocalRouteMtu();
             if (rc)
             {
                 self->startLoopRunning = false;
-                self->start();
+                self->start(self->nid, self->eid);
                 return;
             }
             self->startLoopRunning = false;
@@ -217,56 +223,53 @@ void NVMeMi::epOptimize()
 
 void NVMeMi::start()
 {
+    // init mctp ep via mctpd. Call is idempotent.
+    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
+              << "start MCTP initialization" << std::endl;
+    int i = 0;
+    for (;; i++)
+    {
+        try
+        {
+            int lnid = 0;
+            uint8_t leid = 0;
+
+            auto msg = dbus.new_method_call(
+                "xyz.openbmc_project.MCTP", "/xyz/openbmc_project/mctp",
+                "au.com.CodeConstruct.MCTP", "SetupEndpoint");
+
+            msg.append("mctpi2c" + std::to_string(bus));
+            msg.append(std::vector<uint8_t>{static_cast<uint8_t>(addr)});
+            auto reply = msg.call(); // throw SdBusError
+
+            reply.read(leid);
+            reply.read(lnid);
+            start(lnid, leid);
+            return;
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
+                      << "retry to SetupEndpoint: " << e.what() << std::endl;
+        }
+    }
+    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
+              << "fail to init MCTP endpoint: " << std::endl;
+}
+
+void NVMeMi::start(int network, std::uint8_t eid)
+{
     if (mctpStatus == Status::Terminating)
     {
-        restart = true;
+        this->nid = network;
+        this->eid = eid;
+        this->restart = true;
         return;
     }
 
     if (mctpStatus == Status::Reset)
     {
-        // init mctp ep via mctpd
-        std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                  << "start MCTP initialization" << std::endl;
-        int i = 0;
-        for (;; i++)
-        {
-            try
-            {
-                int lnid = 0;
-                uint8_t leid = 0;
-
-                auto msg = dbus.new_method_call(
-                    "xyz.openbmc_project.MCTP", "/xyz/openbmc_project/mctp",
-                    "au.com.CodeConstruct.MCTP", "SetupEndpoint");
-
-                msg.append("mctpi2c" + std::to_string(bus));
-                msg.append(std::vector<uint8_t>{static_cast<uint8_t>(addr)});
-                auto reply = msg.call(); // throw SdBusError
-
-                reply.read(leid);
-                reply.read(lnid);
-                epConfigure(lnid, leid);
-                break;
-            }
-            catch (const std::exception& e)
-            {
-                if (i < 5)
-                {
-                    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                              << "retry to SetupEndpoint: " << e.what()
-                              << std::endl;
-                }
-                else
-                {
-                    epReset();
-                    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                              << "fail to init MCTP endpoint: " << e.what()
-                              << std::endl;
-                    return;
-                }
-            }
-        }
+        epConfigure(network, eid);
 
         // open mctp endpoint
         if (!epConnect())

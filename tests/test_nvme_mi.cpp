@@ -81,6 +81,8 @@ class NVMeMiMock :
     }
 
     MOCK_METHOD(void, start, (), (override));
+    MOCK_METHOD(void, start, (int, uint8_t), (override));
+    MOCK_METHOD(void, stop, (), (override));
     MOCK_METHOD(int, getNID, (), (const override));
     MOCK_METHOD(int, getEID, (), (const override));
     MOCK_METHOD(void, miSubsystemHealthStatusPoll,
