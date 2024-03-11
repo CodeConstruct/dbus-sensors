@@ -78,7 +78,7 @@ SmbusMctpdDevice::SmbusMctpdDevice(
     smbus(smbus), smdev(smdev)
 {}
 
-std::string SmbusMctpdDevice::describe()
+std::string SmbusMctpdDevice::describe() const
 {
     return std::string("bus: ")
         .append(std::to_string(smbus))
@@ -264,7 +264,7 @@ void MctpdEndpoint::setMtu(
     }
 }
 
-std::string MctpdEndpoint::describe()
+std::string MctpdEndpoint::describe() const
 {
     return std::string("network: ")
         .append(std::to_string(mctp.network))

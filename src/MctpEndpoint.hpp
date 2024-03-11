@@ -106,7 +106,7 @@ class MctpEndpoint
      * @return A formatted string representing the endpoint in terms of its
      *         address properties
      */
-    virtual std::string describe() = 0;
+    virtual std::string describe() const = 0;
 };
 
 /**
@@ -156,7 +156,7 @@ class MctpDevice
      * @return A formatted string representing the device in terms of its
      *         address properties.
      */
-    virtual std::string describe() = 0;
+    virtual std::string describe() const = 0;
 };
 
 /**
@@ -192,7 +192,7 @@ class MctpdEndpoint :
         std::function<void(const std::error_code& ec)>&& completed) override;
     void recover() override;
 
-    std::string describe() override;
+    std::string describe() const override;
 
     /**
      * @brief Indicate the endpoint has been removed
@@ -245,7 +245,7 @@ class MctpdDevice :
                                   const std::shared_ptr<MctpEndpoint>& ep)>&&
                    action) override;
     void removed() override;
-    std::string describe() override = 0;
+    std::string describe() const override = 0;
 
   private:
     std::shared_ptr<sdbusplus::asio::connection> connection;
@@ -271,7 +271,7 @@ class SmbusMctpdDevice : public MctpdDevice
     SmbusMctpdDevice(SmbusMctpdDevice&& other) = delete;
     ~SmbusMctpdDevice() override = default;
 
-    std::string describe() override;
+    std::string describe() const override;
 
   private:
     const int smbus;
