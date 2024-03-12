@@ -46,7 +46,7 @@ void MctpdDevice::setup(
             if (auto self = weak.lock())
             {
                 self->endpoint = std::make_shared<MctpdEndpoint>(
-                    self->connection, objpath, network, eid);
+                    self, self->connection, objpath, network, eid);
                 action(static_cast<const std::error_code&>(ec), self->endpoint);
             }
         },
@@ -87,10 +87,11 @@ std::string SmbusMctpdDevice::describe() const
 }
 
 MctpdEndpoint::MctpdEndpoint(
+    const std::shared_ptr<MctpDevice>& device,
     const std::shared_ptr<sdbusplus::asio::connection>& connection,
     sdbusplus::message::object_path objpath, int network, uint8_t eid) :
-    connection(connection),
-    objpath(std::move(objpath)), mctp{network, eid}
+    device(device),
+    connection(connection), objpath(std::move(objpath)), mctp{network, eid}
 {}
 
 void MctpdEndpoint::onMctpEndpointChange(sdbusplus::message_t& msg)
@@ -269,5 +270,7 @@ std::string MctpdEndpoint::describe() const
     return std::string("network: ")
         .append(std::to_string(mctp.network))
         .append(", EID: ")
-        .append(std::to_string(mctp.eid));
+        .append(std::to_string(mctp.eid))
+        .append(" | ")
+        .append(device->describe());
 }

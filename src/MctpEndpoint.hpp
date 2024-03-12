@@ -176,6 +176,7 @@ class MctpdEndpoint :
   public:
     MctpdEndpoint() = delete;
     MctpdEndpoint(
+        const std::shared_ptr<MctpDevice>& device,
         const std::shared_ptr<sdbusplus::asio::connection>& connection,
         sdbusplus::message::object_path objpath, int network, uint8_t eid);
     MctpdEndpoint& McptdEndpoint(const MctpdEndpoint& other) = delete;
@@ -203,6 +204,7 @@ class MctpdEndpoint :
     void remove();
 
   private:
+    std::shared_ptr<MctpDevice> device;
     std::shared_ptr<sdbusplus::asio::connection> connection;
     sdbusplus::message::object_path objpath;
     struct
