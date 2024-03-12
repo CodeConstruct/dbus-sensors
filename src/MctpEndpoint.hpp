@@ -45,6 +45,7 @@ class MctpException : public std::exception
 class MctpEndpoint
 {
   public:
+    using Event = std::function<void(const std::shared_ptr<MctpEndpoint>& ep)>;
     virtual ~MctpEndpoint() = default;
 
     /**
@@ -72,9 +73,8 @@ class MctpEndpoint
      * @param removed The callback to execute when the MCTP layer indicates the
      *                endpoint has been removed.
      */
-    virtual void subscribe(std::function<void()>&& degraded,
-                           std::function<void()>&& available,
-                           std::function<void()>&& removed) = 0;
+    virtual void subscribe(Event&& degraded, Event&& available,
+                           Event&& removed) = 0;
 
     /**
      * @brief Configures the Maximum Transmission Unit (MTU) for the route to
@@ -91,6 +91,11 @@ class MctpEndpoint
     virtual void
         setMtu(uint32_t mtu,
                std::function<void(const std::error_code& ec)>&& completed) = 0;
+
+    /**
+     * @brief Remove the endpoint from its associated network
+     */
+    virtual void remove() = 0;
 
     /**
      * @brief Request that the MCTP layer attempt to recover communication with
@@ -145,12 +150,9 @@ class MctpDevice
                   action) = 0;
 
     /**
-     * @brief Indicate that the device has been removed.
-     *
-     * May be called prior to destruction to address any tear-down required
-     * without the constraints of a destructor.
+     * @brief Remove the device and any associated endpoint from the MCTP stack.
      */
-    virtual void removed() = 0;
+    virtual void remove() = 0;
 
     /**
      * @return A formatted string representing the device in terms of its
@@ -185,23 +187,25 @@ class MctpdEndpoint :
 
     int network() const override;
     uint8_t eid() const override;
-    void subscribe(std::function<void()>&& degraded,
-                   std::function<void()>&& available,
-                   std::function<void()>&& removed) override;
+    void subscribe(Event&& degraded, Event&& available,
+                   Event&& removed) override;
     void setMtu(
         uint32_t mtu,
         std::function<void(const std::error_code& ec)>&& completed) override;
     void recover() override;
+    void remove() override;
 
     std::string describe() const override;
 
     /**
      * @brief Indicate the endpoint has been removed
      *
-     * Called from the implementation of MctpdDevice::removed() for resource
-     * cleanup prior to destruction.
+     * Called from the implementation of MctpdDevice for resource cleanup
+     * prior to destruction. Resource cleanup is delegated by invoking the
+     * notifyRemoved() callback. As the actions may be abitrary we avoid
+     * invoking notifyRemoved() in the destructor.
      */
-    void remove();
+    void removed();
 
   private:
     std::shared_ptr<MctpDevice> device;
@@ -212,9 +216,9 @@ class MctpdEndpoint :
         int network;
         uint8_t eid;
     } mctp;
-    std::function<void()> available;
-    std::function<void()> degraded;
-    std::function<void()> removed;
+    Event notifyAvailable;
+    Event notifyDegraded;
+    Event notifyRemoved;
     std::optional<sdbusplus::bus::match_t> connectivityMatch;
 
     void onMctpEndpointChange(sdbusplus::message_t& msg);
@@ -246,14 +250,26 @@ class MctpdDevice :
     void setup(std::function<void(const std::error_code& ec,
                                   const std::shared_ptr<MctpEndpoint>& ep)>&&
                    action) override;
-    void removed() override;
+    void remove() override;
     std::string describe() const override = 0;
 
   private:
+    static void
+        onEndpointInterfacesRemoved(const std::weak_ptr<MctpdDevice>& weak,
+                                    const std::string& objpath,
+                                    sdbusplus::message_t& msg);
+
     std::shared_ptr<sdbusplus::asio::connection> connection;
     const std::string interface;
     const std::vector<uint8_t> physaddr;
     std::shared_ptr<MctpdEndpoint> endpoint;
+    std::unique_ptr<sdbusplus::bus::match_t> removeMatch;
+
+    void finaliseEndpoint(
+        const std::string& objpath, uint8_t eid, int network,
+        std::function<void(const std::error_code& ec,
+                           const std::shared_ptr<MctpEndpoint>& ep)>&& action);
+    void endpointRemoved();
 };
 
 /**

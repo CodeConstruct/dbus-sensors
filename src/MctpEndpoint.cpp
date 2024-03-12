@@ -4,6 +4,7 @@
 
 #include <boost/system/detail/errc.hpp>
 #include <sdbusplus/asio/connection.hpp>
+#include <sdbusplus/bus/match.hpp>
 #include <sdbusplus/exception.hpp>
 #include <sdbusplus/message.hpp>
 #include <sdbusplus/message/native_types.hpp>
@@ -26,32 +27,69 @@ MctpdDevice::MctpdDevice(
     interface(interface), physaddr(physaddr)
 {}
 
+void MctpdDevice::onEndpointInterfacesRemoved(
+    const std::weak_ptr<MctpdDevice>& weak, const std::string& objpath,
+    sdbusplus::message_t& msg)
+{
+    auto path = msg.unpack<sdbusplus::message::object_path>();
+    if (path.str != objpath)
+    {
+        return;
+    }
+
+    auto removedIfaces = msg.unpack<std::set<std::string>>();
+    if (!removedIfaces.contains(mctpdEndpointControlInterface))
+    {
+        return;
+    }
+
+    if (auto self = weak.lock())
+    {
+        self->endpointRemoved();
+    }
+}
+
+void MctpdDevice::finaliseEndpoint(
+    const std::string& objpath, uint8_t eid, int network,
+    std::function<void(const std::error_code& ec,
+                       const std::shared_ptr<MctpEndpoint>& ep)>&& action)
+{
+    using namespace sdbusplus::bus::match;
+    const auto matchSpec = std::string(rules::interfacesRemoved())
+                               .append(rules::argNpath(0, objpath));
+    removeMatch = std::make_unique<sdbusplus::bus::match_t>(
+        *connection, matchSpec,
+        std::bind_front(MctpdDevice::onEndpointInterfacesRemoved,
+                        weak_from_this(), objpath));
+    endpoint = std::make_shared<MctpdEndpoint>(shared_from_this(), connection,
+                                               objpath, network, eid);
+    action({}, endpoint);
+}
+
 void MctpdDevice::setup(
     std::function<void(const std::error_code& ec,
                        const std::shared_ptr<MctpEndpoint>& ep)>&& action)
 {
+    auto onSetup = [weak{weak_from_this()}, action{std::move(action)}](
+                       const boost::system::error_code& ec, uint8_t eid,
+                       int network, const std::string& objpath,
+                       bool allocated [[maybe_unused]]) mutable {
+        if (ec)
+        {
+            action(ec, {});
+            return;
+        }
+
+        if (auto self = weak.lock())
+        {
+            self->finaliseEndpoint(objpath, eid, network, std::move(action));
+        }
+    };
     try
     {
-        connection->async_method_call(
-            [weak{weak_from_this()}, action](
-                const boost::system::error_code& ec, uint8_t eid, int network,
-                const std::string& objpath, bool allocated [[maybe_unused]]) {
-            if (ec)
-            {
-                /* XXX What error does mctpd actually provide? */
-                action(ec, {});
-                return;
-            }
-
-            if (auto self = weak.lock())
-            {
-                self->endpoint = std::make_shared<MctpdEndpoint>(
-                    self, self->connection, objpath, network, eid);
-                action(static_cast<const std::error_code&>(ec), self->endpoint);
-            }
-        },
-            mctpdBusName, mctpdControlPath, mctpdControlInterface,
-            "SetupEndpoint", interface, physaddr);
+        connection->async_method_call(onSetup, mctpdBusName, mctpdControlPath,
+                                      mctpdControlInterface, "SetupEndpoint",
+                                      interface, physaddr);
     }
     catch (const sdbusplus::exception::SdBusError& err)
     {
@@ -61,12 +99,21 @@ void MctpdDevice::setup(
     }
 }
 
-void MctpdDevice::removed()
+void MctpdDevice::endpointRemoved()
+{
+    if (endpoint)
+    {
+        removeMatch.reset();
+        endpoint->removed();
+        endpoint.reset();
+    }
+}
+
+void MctpdDevice::remove()
 {
     if (endpoint)
     {
         endpoint->remove();
-        endpoint.reset();
     }
 }
 
@@ -122,16 +169,16 @@ void MctpdEndpoint::updateEndpointConnectivity(const std::string& connectivity)
 {
     if (connectivity == "Degraded")
     {
-        if (degraded)
+        if (notifyDegraded)
         {
-            degraded();
+            notifyDegraded(shared_from_this());
         }
     }
     else if (connectivity == "Available")
     {
-        if (available)
+        if (notifyAvailable)
         {
-            available();
+            notifyAvailable(shared_from_this());
         }
     }
     else
@@ -151,9 +198,8 @@ uint8_t MctpdEndpoint::eid() const
     return mctp.eid;
 }
 
-void MctpdEndpoint::subscribe(std::function<void()>&& degraded,
-                              std::function<void()>&& available,
-                              std::function<void()>&& removed)
+void MctpdEndpoint::subscribe(Event&& degraded, Event&& available,
+                              Event&& removed)
 {
     const auto matchType = std::string("type='signal'");
     const auto matchMember = std::string("member='PropertiesChanged'");
@@ -170,9 +216,9 @@ void MctpdEndpoint::subscribe(std::function<void()>&& degraded,
                                .append(",")
                                .append(arg0Namespace);
 
-    this->degraded = degraded;
-    this->available = available;
-    this->removed = removed;
+    this->notifyDegraded = degraded;
+    this->notifyAvailable = available;
+    this->notifyRemoved = removed;
 
     try
     {
@@ -205,9 +251,9 @@ void MctpdEndpoint::subscribe(std::function<void()>&& degraded,
     }
     catch (const sdbusplus::exception::SdBusError& err)
     {
-        this->degraded = nullptr;
-        this->available = nullptr;
-        this->removed = nullptr;
+        this->notifyDegraded = nullptr;
+        this->notifyAvailable = nullptr;
+        this->notifyRemoved = nullptr;
         std::throw_with_nested(
             MctpException("Failed to register connectivity signal match"));
     }
@@ -241,9 +287,31 @@ void MctpdEndpoint::recover()
 
 void MctpdEndpoint::remove()
 {
-    if (removed)
+    try
     {
-        removed();
+        connection->async_method_call(
+            [self{shared_from_this()}](const boost::system::error_code& ec) {
+            if (ec)
+            {
+                std::cerr << "Failed to remove endpoint [" << self->describe()
+                          << "]" << std::endl;
+                return;
+            }
+        },
+            mctpdBusName, objpath.str, mctpdEndpointControlInterface, "Remove");
+    }
+    catch (const sdbusplus::exception::SdBusError& err)
+    {
+        std::throw_with_nested(
+            MctpException("Failed schedule endpoint removal"));
+    }
+}
+
+void MctpdEndpoint::removed()
+{
+    if (notifyRemoved)
+    {
+        notifyRemoved(shared_from_this());
     }
 }
 
