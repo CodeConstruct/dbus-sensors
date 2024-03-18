@@ -777,6 +777,13 @@ void NVMeSubsystem::stop()
     {
         std::cerr << "status else" << std::endl;
         markFunctional(false);
+
+        // There's been an explicit request to stop the subsystem. If it has
+        // entered an unavailable state, reset that too. If the subsystem
+        // continues to be unavailable beyond a subsequent invocation of start()
+        // this will be detected in the usual fashion. Put another way: Don't
+        // unnecessarily impede the progress of a subsequent start().
+        unavailableCount = 0;
     }
 
     if (plugin)
