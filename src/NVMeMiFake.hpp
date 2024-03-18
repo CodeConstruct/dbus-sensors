@@ -87,11 +87,11 @@ class NVMeMiFake :
         thread.join();
     }
 
-    void start() override {}
-    void start(int network [[maybe_unused]],
-               uint8_t eid [[maybe_unused]]) override
+    void start(const std::shared_ptr<MctpEndpoint>& endpoint
+               [[maybe_unused]]) override
     {}
     void stop() override {}
+    void recover() override {}
 
     void miSubsystemHealthStatusPoll(
         std::function<void(const std::error_code&,

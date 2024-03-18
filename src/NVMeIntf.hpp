@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MctpEndpoint.hpp"
 #include "NVMeError.hpp"
 
 #include <libnvme-mi.h>
@@ -169,9 +170,9 @@ class NVMeMiIntf
                                       const std::vector<nvme_mi_ctrl_t>&)>
                        cb) = 0;
 
-    virtual void start() = 0;
-    virtual void start(int network, std::uint8_t eid) = 0;
+    virtual void start(const std::shared_ptr<MctpEndpoint>& ep) = 0;
     virtual void stop() = 0;
+    virtual void recover() = 0;
 
     virtual ~NVMeMiIntf() = default;
 

@@ -80,9 +80,10 @@ class NVMeMiMock :
         ON_CALL(*this, adminSecurityReceive).WillByDefault([]() { return; });
     }
 
-    MOCK_METHOD(void, start, (), (override));
-    MOCK_METHOD(void, start, (int, uint8_t), (override));
+    MOCK_METHOD(void, start, (const std::shared_ptr<MctpEndpoint>&),
+                (override));
     MOCK_METHOD(void, stop, (), (override));
+    MOCK_METHOD(void, recover, (), (override));
     MOCK_METHOD(int, getNID, (), (const override));
     MOCK_METHOD(int, getEID, (), (const override));
     MOCK_METHOD(void, miSubsystemHealthStatusPoll,

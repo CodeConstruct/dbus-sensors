@@ -721,8 +721,9 @@ void NVMeSubsystem::start()
                 self->ctemp->incrementError();
                 if (self->ctemp->inError())
                 {
-                    self->markFunctional(false);
-                    self->markAvailable(false);
+                    auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(
+                        self->nvmeIntf.getInferface());
+                    intf->recover();
                 }
                 return;
             }

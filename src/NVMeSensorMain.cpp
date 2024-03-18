@@ -14,7 +14,9 @@
 // limitations under the License.
 */
 
+#include "MctpEndpoint.hpp"
 #include "NVMeBasic.hpp"
+#include "NVMeIntf.hpp"
 #include "NVMeMi.hpp"
 #include "NVMePlugin.hpp"
 #include "NVMeSubsys.hpp"
@@ -26,10 +28,18 @@
 
 #include <optional>
 #include <regex>
+#include <system_error>
+
+struct NVMeDevice
+{
+    std::shared_ptr<MctpDevice> dev;
+    NVMeIntf intf;
+    std::shared_ptr<NVMeSubsystem> subsys;
+};
 
 // a map with key value of {path, NVMeSubsystem}
-using NVMEMap = std::map<std::string, std::shared_ptr<NVMeSubsystem>>;
-static NVMEMap nvmeSubsysMap;
+using NVMEMap = std::map<std::string, NVMeDevice>;
+static NVMEMap nvmeDevices;
 
 // A map from root bus number to the Worker
 // This map means to reuse the same worker for all NVMe EP under the same
@@ -95,6 +105,85 @@ static std::optional<std::string>
     return std::get<std::string>(findProtocol->second);
 }
 
+static void
+    setupMctpDevice(const std::shared_ptr<MctpDevice>& dev,
+                    const std::weak_ptr<NVMeMiIntf>& weakIntf,
+                    const std::weak_ptr<NVMeSubsystem>& weakSubsys,
+                    const std::shared_ptr<boost::asio::steady_timer>& timer)
+{
+    dev->setup([weakDev{std::weak_ptr(dev)}, weakIntf, weakSubsys,
+                timer](const std::error_code& ec,
+                       const std::shared_ptr<MctpEndpoint>& ep) {
+        if (ec)
+        {
+            auto dev = weakDev.lock();
+            if (!dev)
+            {
+                return;
+            }
+            // Setup failed, wait a bit and try again
+            timer->expires_from_now(std::chrono::seconds(5));
+            timer->async_wait([=](const boost::system::error_code& ec) {
+                if (!ec)
+                {
+                    setupMctpDevice(dev, weakIntf, weakSubsys, timer);
+                }
+            });
+            return;
+        }
+
+        ep->subscribe(
+            // Degraded
+            [weakIntf](const std::shared_ptr<MctpEndpoint>& ep) {
+            if (auto miIntf = weakIntf.lock())
+            {
+                std::cout << "[" << ep->describe() << "]: Degraded"
+                          << std::endl;
+                miIntf->stop();
+            }
+        },
+            // Available
+            [weakIntf](const std::shared_ptr<MctpEndpoint>& ep) {
+            if (auto miIntf = weakIntf.lock())
+            {
+                std::cout << "[" << ep->describe() << "]: Available"
+                          << std::endl;
+                miIntf->start(ep);
+            }
+        },
+            // Removed
+            [=](const std::shared_ptr<MctpEndpoint>& ep) {
+            auto nvmeSubsys = weakSubsys.lock();
+            auto miIntf = weakIntf.lock();
+            auto dev = weakDev.lock();
+            if (!nvmeSubsys || !miIntf || !dev)
+            {
+                return;
+            }
+
+            std::cout << "[" << ep->describe() << "]: Removed" << std::endl;
+            nvmeSubsys->stop();
+            miIntf->stop();
+            // Start polling for the return of the device
+            timer->expires_from_now(std::chrono::seconds(5));
+            timer->async_wait([=](const boost::system::error_code& ec) {
+                if (!ec)
+                {
+                    setupMctpDevice(dev, weakIntf, weakSubsys, timer);
+                }
+            });
+        });
+
+        auto miIntf = weakIntf.lock();
+        auto nvmeSubsys = weakSubsys.lock();
+        if (miIntf && nvmeSubsys)
+        {
+            miIntf->start(ep);
+            nvmeSubsys->start();
+        }
+    });
+}
+
 static void handleConfigurations(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objectServer,
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
@@ -108,7 +197,7 @@ static void handleConfigurations(
      * short and should not be delayed by NVMe-MI protocol msg from NVMe
      * subsystem.
      */
-    std::map<std::string, NVMeIntf> nvmeInterfaces;
+    std::map<std::string, NVMeDevice> updatedDevices;
     for (const auto& [interfacePath, configData] : nvmeConfigurations)
     {
         // find base configuration
@@ -152,7 +241,8 @@ static void handleConfigurations(
                 NVMeIntf nvmeBasic = NVMeIntf::create<NVMeBasic>(io, *busNumber,
                                                                  *address);
 
-                nvmeInterfaces.emplace(interfacePath, std::move(nvmeBasic));
+                NVMeDevice dev{{}, nvmeBasic, {}};
+                updatedDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
             {
@@ -200,14 +290,17 @@ static void handleConfigurations(
 
             try
             {
-                NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(io, dbusConnection,
-                                                           *busNumber, *address,
-                                                           worker, powerState);
+                auto mctpDev = std::make_shared<SmbusMctpdDevice>(
+                    dbusConnection, *busNumber, *address);
+                NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(
+                    io, dbusConnection, mctpDev, worker, powerState);
 
                 auto nvme = std::get<std::shared_ptr<NVMeMiIntf>>(
                     nvmeMi.getInferface());
-                nvme->start();
-                nvmeInterfaces.emplace(interfacePath, nvmeMi);
+                // Create a partial NVMeDevice entry in the temporary
+                // updatedDevices map
+                NVMeDevice dev{mctpDev, nvmeMi, {}};
+                updatedDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
             {
@@ -234,16 +327,31 @@ static void handleConfigurations(
         std::optional<std::string> sensorName = extractName(interfacePath,
                                                             sensorConfig);
 
-        auto find = nvmeInterfaces.find(interfacePath);
-        if (find == nvmeInterfaces.end())
+        auto find = updatedDevices.find(interfacePath);
+        if (find == updatedDevices.end())
             continue;
         try
         {
             auto nvmeSubsys = NVMeSubsystem::create(
                 io, objectServer, dbusConnection, interfacePath, *sensorName,
-                configData, std::move(find->second));
-            nvmeSubsysMap.emplace(interfacePath, nvmeSubsys);
-            nvmeSubsys->start();
+                configData, find->second.intf);
+            // Complete the NVMeDevice entry with its subsystem and record it in
+            // the persistent nvmeDeviceMap
+            find->second.subsys = nvmeSubsys;
+            auto [entry, _] = nvmeDevices.emplace(interfacePath,
+                                                  std::move(find->second));
+            auto nvmeDev = entry->second;
+            if (nvmeDev.intf.getProtocol() != NVMeIntf::Protocol::NVMeMI)
+            {
+                nvmeSubsys->start();
+                continue;
+            }
+
+            auto miIntf = std::get<std::shared_ptr<NVMeMiIntf>>(
+                nvmeDev.intf.getInferface());
+            auto timer = std::make_shared<boost::asio::steady_timer>(
+                io, std::chrono::seconds(5));
+            setupMctpDevice(nvmeDev.dev, miIntf, nvmeSubsys, timer);
         }
         catch (std::exception& ex)
         {
@@ -260,14 +368,14 @@ void createNVMeSubsystems(
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
 {
     // todo: it'd be better to only update the ones we care about
-    for (const auto& [_, nvmeSubsys] : nvmeSubsysMap)
+    for (const auto& [_, nvmeDev] : nvmeDevices)
     {
-        if (nvmeSubsys)
+        if (nvmeDev.subsys)
         {
-            nvmeSubsys->stop();
+            nvmeDev.subsys->stop();
         }
     }
-    nvmeSubsysMap.clear();
+    nvmeDevices.clear();
 
     static int count = 0;
     static ManagedObjectType configs;
@@ -313,7 +421,7 @@ void createNVMeSubsystems(
     getter->getConfiguration(std::vector<std::string>{nvme::sensorType});
 }
 
-static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
+static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& devices)
 {
     if (message.is_method_error())
     {
@@ -333,14 +441,14 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& subsystems)
         return;
     }
 
-    auto subsys = subsystems.find(path);
-    if (subsys == subsystems.end())
+    auto device = devices.find(path);
+    if (device == devices.end())
     {
         return;
     }
 
-    subsys->second->stop();
-    subsystems.erase(subsys);
+    device->second.subsys->stop();
+    devices.erase(device);
 }
 
 int main()
@@ -415,9 +523,7 @@ int main()
         static_cast<sdbusplus::bus_t&>(*systemBus),
         "type='signal',member='InterfacesRemoved',arg0path='" +
             std::string(inventoryPath) + "/'",
-        [](sdbusplus::message_t& msg) {
-        interfaceRemoved(msg, nvmeSubsysMap);
-    });
+        [](sdbusplus::message_t& msg) { interfaceRemoved(msg, nvmeDevices); });
 
     setupManufacturingModeMatch(*systemBus);
 

@@ -28,7 +28,8 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 {
   public:
     NVMeMi(boost::asio::io_context& io,
-           std::shared_ptr<sdbusplus::asio::connection> conn, int bus, int addr,
+           const std::shared_ptr<sdbusplus::asio::connection>& conn,
+           const std::shared_ptr<const MctpDevice>& device,
            const std::shared_ptr<NVMeMiWorker>& worker,
            PowerState readState = PowerState::always);
     ~NVMeMi() override;
@@ -108,9 +109,9 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                        uint8_t passes, uint32_t pattern, bool invert_pattern,
                        std::function<void(nvme_ex_ptr ex)>&& cb) override;
 
-    void start(int network, std::uint8_t eid) override;
-    void start() override;
+    void start(const std::shared_ptr<MctpEndpoint>& ep) override;
     void stop() override;
+    void recover() override;
 
   private:
     // the transfer size for nvme mi messages.
@@ -120,12 +121,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     static nvme_root_t nvmeRoot;
 
     boost::asio::io_context& io;
-    std::shared_ptr<sdbusplus::asio::connection> conn;
-    sdbusplus::bus_t& dbus;
-
-    // I2C info
-    int bus;
-    int addr;
+    std::shared_ptr<const MctpDevice> device;
 
     // power state
     std::unique_ptr<PowerCallbackEntry> powerCallback;
@@ -175,8 +171,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     void epOptimize();
 
     Status mctpStatus;
-    int nid;
-    uint8_t eid;
+    std::shared_ptr<MctpEndpoint> endpoint;
     uint16_t mtu;
     nvme_mi_ep_t nvmeEP;
     // Handle a start() while in Status::Terminating on entry to Status::Reset.
@@ -198,7 +193,9 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     void miSetMCTPConfiguration(
         std::function<void(const std::error_code&)>&& cb);
 
-    int configureLocalRouteMtu();
+    void configureLocalRouteMtu(
+        std::function<void(const std::error_code& ec)>&& completed,
+        int retries = 5);
 
     std::optional<std::error_code> isEndpointDegraded() const;
 

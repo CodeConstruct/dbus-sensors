@@ -24,13 +24,13 @@ constexpr int downloadDefaultTimeoutMS = 10 * 1000;
 constexpr int initCmdTimeoutMS = 1000;
 
 NVMeMi::NVMeMi(boost::asio::io_context& io,
-               std::shared_ptr<sdbusplus::asio::connection> conn, int bus,
-               int addr, const std::shared_ptr<NVMeMiWorker>& worker,
+               const std::shared_ptr<sdbusplus::asio::connection>& conn,
+               const std::shared_ptr<const MctpDevice>& device,
+               const std::shared_ptr<NVMeMiWorker>& worker,
                PowerState readState) :
     io(io),
-    conn(conn), dbus(*conn.get()), bus(bus), addr(addr), readState(readState),
-    mctpStatus(Status::Reset), nid(-1), eid(0), mtu(64), nvmeEP(nullptr),
-    restart(false), startLoopRunning(false), worker(worker)
+    device(device), readState(readState), mctpStatus(Status::Reset), mtu(64),
+    nvmeEP(nullptr), restart(false), startLoopRunning(false), worker(worker)
 {
     // set update the worker thread
     if (!nvmeRoot)
@@ -45,13 +45,9 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
         // life time of the callback is binding to the NVMeMi instance, so only
         // this capture is required.
         powerCallback = setupPowerMatchCallback(conn, [this](PowerState, bool) {
-            if (::readingStateGood(this->readState))
+            if (!::readingStateGood(this->readState))
             {
-                start();
-            }
-            else
-            {
-                stop();
+                recover();
             }
         });
     }
@@ -71,32 +67,30 @@ void NVMeMi::epReset()
                     "nvmeEP was unpopulated in Status::Initiated state");
             }
             mctpStatus = Status::Terminating;
-            // Immediately reset nid and eid so that we can capture the values
+            std::cerr << "[" << endpoint->describe() << "]"
+                      << "start MCTP closure" << std::endl;
+            // Immediately reset endpoint so that we can capture the parameter
             // from a subsequent invocation of start() while in
             // Status::Terminating
-            nid = -1;
-            eid = 0;
+            endpoint.reset();
             // Invoke nvme_mi_close() via a lambda that we schedule via
             // flushOperations(). Using flushOperations() ensures that any
             // outstanding tasks are executed before nvme_mi_close() is invoked,
             // invalidating their controller reference.
-            std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                      << "start MCTP closure" << std::endl;
             flushOperations([self{shared_from_this()}]() {
                 nvme_mi_close(self->nvmeEP);
                 self->mtu = 64;
                 self->nvmeEP = nullptr;
                 self->mctpStatus = Status::Reset;
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << "] "
+                std::cerr << "[" << self->device->describe() << "] "
                           << "end MCTP closure" << std::endl;
                 if (self->restart)
                 {
                     // If restart is true then we've captured the updated
-                    // network and EID values in the respective members. We pass
-                    // these to start() to recreate the connection.
+                    // endpoint. We pass it to start() to recreate the
+                    // connection.
                     self->restart = false;
-                    self->start(self->nid, self->eid);
+                    self->start(self->endpoint);
                 }
             });
             return;
@@ -116,9 +110,7 @@ bool NVMeMi::epConnect(int lnid, uint8_t leid)
                 throw std::logic_error(
                     "nvmeEP populated in Status::Reset state");
             }
-            nid = lnid;
-            eid = leid;
-            nvmeEP = nvme_mi_open_mctp(nvmeRoot, nid, eid);
+            nvmeEP = nvme_mi_open_mctp(nvmeRoot, lnid, leid);
             if (nvmeEP != nullptr)
             {
                 mctpStatus = Status::Initiated;
@@ -163,89 +155,66 @@ void NVMeMi::epOptimize()
         unsigned timeout = nvme_mi_ep_get_timeout(nvmeEP);
         nvme_mi_ep_set_timeout(nvmeEP, initCmdTimeoutMS);
         miSetMCTPConfiguration(
-            [timeout, self{shared_from_this()}](const std::error_code& ec) {
+            [timeout, ep{endpoint},
+             self{shared_from_this()}](const std::error_code& ec) {
             nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
             if (ec)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << "]"
-                          << "Failed setting up MTU for the MCTP endpoint. "
-                          << std::to_string(self->nid) + ":" +
-                                 std::to_string(self->eid)
+                std::cerr << "[" << ep->describe() << "]"
+                          << "Failed setting up MTU for the MCTP endpoint."
                           << std::endl;
                 self->startLoopRunning = false;
-                self->start(self->nid, self->eid);
+                self->recover();
                 return;
             }
-            auto rc = self->configureLocalRouteMtu();
-            if (rc)
-            {
+            self->configureLocalRouteMtu([self](const std::error_code& ec) {
+                if (ec)
+                {
+                    self->startLoopRunning = false;
+                    self->recover();
+                    return;
+                }
                 self->startLoopRunning = false;
-                self->start(self->nid, self->eid);
-                return;
-            }
-            self->startLoopRunning = false;
-            self->mctpStatus = Status::Connected;
+                self->mctpStatus = Status::Connected;
+            });
         });
     });
 }
 
-void NVMeMi::start()
+void NVMeMi::recover()
 {
-    // init mctp ep via mctpd. Call is idempotent.
-    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-              << "start MCTP initialization" << std::endl;
-    int i = 0;
-    for (;; i++)
+    switch (mctpStatus)
     {
-        try
-        {
-            int lnid = 0;
-            uint8_t leid = 0;
-
-            auto msg = dbus.new_method_call(
-                "xyz.openbmc_project.MCTP", "/xyz/openbmc_project/mctp",
-                "au.com.CodeConstruct.MCTP", "SetupEndpoint");
-
-            msg.append("mctpi2c" + std::to_string(bus));
-            msg.append(std::vector<uint8_t>{static_cast<uint8_t>(addr)});
-            auto reply = msg.call(); // throw SdBusError
-
-            reply.read(leid);
-            reply.read(lnid);
-            start(lnid, leid);
+        case Status::Reset:
             return;
-        }
-        catch (const std::exception& e)
-        {
-            std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                      << "retry to SetupEndpoint: " << e.what() << std::endl;
-        }
+        case Status::Initiated:
+        case Status::Connected:
+            endpoint->recover();
+            return;
+        case Status::Terminating:
+            return;
     }
-    std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-              << "fail to init MCTP endpoint: " << std::endl;
+    throw std::logic_error("Unreachable");
 }
 
-void NVMeMi::start(int network, std::uint8_t eid)
+void NVMeMi::start(const std::shared_ptr<MctpEndpoint>& ep)
 {
     if (mctpStatus == Status::Terminating)
     {
-        this->nid = network;
-        this->eid = eid;
+        endpoint = ep;
         this->restart = true;
         return;
     }
 
     if (mctpStatus == Status::Reset)
     {
+        endpoint = ep;
         // open mctp endpoint
-        if (!epConnect(network, eid))
+        if (!epConnect(endpoint->network(), endpoint->eid()))
         {
             epReset();
-            std::cerr << "[bus: " << bus << ", addr: " << addr << "]"
-                      << "can't open MCTP endpoint "
-                      << std::to_string(nid) + ":" + std::to_string(eid)
-                      << std::endl;
+            std::cerr << "[" << ep->describe() << "]"
+                      << "can't open MCTP endpoint " << std::endl;
             return;
         }
     }
@@ -366,9 +335,7 @@ std::error_code NVMeMi::try_post(std::function<void(void)>&& func)
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
-                  << std::endl;
+        std::cerr << "[" << device->describe() << "]" << e.what() << std::endl;
         return std::make_error_code(std::errc::no_such_device);
     }
     return std::error_code();
@@ -380,8 +347,7 @@ void NVMeMi::miConfigureSMBusFrequency(
 {
     if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << "nvme endpoint is invalid" << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
@@ -390,30 +356,26 @@ void NVMeMi::miConfigureSMBusFrequency(
     }
     try
     {
-        post([port_id, max_supported_freq, self{shared_from_this()},
-              cb{std::move(cb)}]() mutable {
+        post([port_id, max_supported_freq, ep{endpoint},
+              self{shared_from_this()}, cb{std::move(cb)}]() mutable {
             enum nvme_mi_config_smbus_freq smbusFreq;
             auto rc = nvme_mi_mi_config_get_smbus_freq(self->nvmeEP, port_id,
                                                        &smbusFreq);
             if (rc)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid)
+                std::cerr << "[" << ep->describe()
                           << "] failed to get the SMBus frequency "
                           << std::endl;
             }
             else if (smbusFreq == NVME_MI_CONFIG_SMBUS_FREQ_100kHz)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid)
+                std::cerr << "[" << ep->describe()
                           << "] Setting the SMBus frequency to 400kHz\n";
                 rc = nvme_mi_mi_config_set_smbus_freq(
                     self->nvmeEP, port_id, NVME_MI_CONFIG_SMBUS_FREQ_400kHz);
                 if (rc)
                 {
-                    std::cerr << "[bus: " << self->bus
-                              << ", addr: " << self->addr
-                              << ", eid: " << static_cast<int>(self->eid)
+                    std::cerr << "[" << ep->describe()
                               << "] failed to set the SMBus frequency\n";
                 }
             }
@@ -429,9 +391,7 @@ void NVMeMi::miConfigureSMBusFrequency(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
-                  << std::endl;
+        std::cerr << "[" << device->describe() << "]" << e.what() << std::endl;
         return;
     }
 }
@@ -442,8 +402,7 @@ void NVMeMi::miConfigureRemoteMCTP(
 {
     if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "] "
                   << "nvme endpoint is invalid" << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
@@ -452,13 +411,12 @@ void NVMeMi::miConfigureRemoteMCTP(
     }
     try
     {
-        post([port, mtu, max_supported_freq, self{shared_from_this()},
-              cb{std::move(cb)}]() mutable {
+        post([port, mtu, max_supported_freq, ep{endpoint},
+              self{shared_from_this()}, cb{std::move(cb)}]() mutable {
             auto rc = nvme_mi_mi_config_set_mctp_mtu(self->nvmeEP, port, mtu);
             if (rc)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << " failed to set remote MCTP MTU for port :"
                           << unsigned(port) << std::endl;
                 self->io.post([cb{std::move(cb)}]() {
@@ -481,9 +439,7 @@ void NVMeMi::miConfigureRemoteMCTP(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
-                  << std::endl;
+        std::cerr << "[" << device->describe() << "] " << e.what() << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
         });
@@ -496,8 +452,7 @@ void NVMeMi::miSetMCTPConfiguration(
 {
     if (mctpStatus == Status::Reset || mctpStatus == Status::Terminating)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "] "
                   << "nvme endpoint is invalid" << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
@@ -506,7 +461,8 @@ void NVMeMi::miSetMCTPConfiguration(
     }
     try
     {
-        post([cb{std::move(cb)}, self{shared_from_this()}]() mutable {
+        post([cb{std::move(cb)}, ep{endpoint},
+              self{shared_from_this()}]() mutable {
             struct nvme_mi_read_nvm_ss_info ssInfo;
             auto rc = nvme_mi_mi_read_mi_data_subsys(self->nvmeEP, &ssInfo);
             if (rc)
@@ -527,9 +483,7 @@ void NVMeMi::miSetMCTPConfiguration(
                 if (rc)
                 {
                     /* PCIe port might not be ready right after AC/DC cycle. */
-                    std::cerr << "[bus: " << self->bus
-                              << ", addr: " << self->addr
-                              << ", eid: " << static_cast<int>(self->eid)
+                    std::cerr << "[" << ep->describe()
                               << "] failed reading port info for port_id: "
                               << unsigned(port_id) << std::endl;
                 }
@@ -555,9 +509,7 @@ void NVMeMi::miSetMCTPConfiguration(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
-                  << std::endl;
+        std::cerr << "[" << device->describe() << "]" << e.what() << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device));
         });
@@ -565,46 +517,37 @@ void NVMeMi::miSetMCTPConfiguration(
     }
 }
 
-int NVMeMi::configureLocalRouteMtu()
+void NVMeMi::configureLocalRouteMtu(
+    std::function<void(const std::error_code& ec)>&& completed, int retries)
 {
-    int i = 0;
-    for (;; i++)
-    {
-        try
+    const uint32_t mctpMtu = mtu + 4;
+    std::function<void(const std::error_code& ec)> retry =
+        [this, cb{std::move(completed)},
+         retries](const std::error_code& ec) mutable {
+        if (!ec)
         {
-            auto path = std::string("/xyz/openbmc_project/mctp/") +
-                        std::to_string(nid) + "/" + std::to_string(eid);
-            auto msg = dbus.new_method_call(
-                "xyz.openbmc_project.MCTP", path.c_str(),
-                "au.com.CodeConstruct.MCTP.Endpoint", "SetMTU");
+            std::cout << "[" << endpoint->describe() << "] "
+                      << "Finished MCTP initialization. MTU: " << mtu
+                      << std::endl;
+            cb(ec);
+            return;
+        }
 
-            // 4 bytes for the MCTP header
-            uint32_t mctpMtu = mtu + 4;
-            msg.append(mctpMtu);
-            auto reply = msg.call();
-            break;
-        }
-        catch (const std::exception& e)
+        retries--;
+        if (retries == 0)
         {
-            if (i < 5)
-            {
-                std::cerr << "[bus: " << bus << ", addr: " << addr << ", eid: "
-                          << "] retry to set MCTP route MTU : " << e.what()
-                          << std::endl;
-            }
-            else
-            {
-                std::cerr << "[bus: " << bus << ", addr: " << addr << ", eid: "
-                          << "] failed to set MCTP route MTU : " << e.what()
-                          << std::endl;
-                return -1;
-            }
+            std::cerr << "[" << endpoint->describe() << "] "
+                      << "failed to set MCTP path MTU: " << ec.message()
+                      << std::endl;
+            cb(ec);
+            return;
         }
-    }
-    std::cerr << "[bus: " << bus << ", addr: " << addr
-              << ", eid: " << std::to_string(eid)
-              << "] finished MCTP initialization. MTU: " << mtu << std::endl;
-    return 0;
+
+        std::cerr << "[" << endpoint->describe() << "] "
+                  << "retry to set MCTP path MTU" << std::endl;
+        configureLocalRouteMtu(std::move(cb), retries);
+    };
+    endpoint->setMtu(mctpMtu, std::move(retry));
 }
 
 void NVMeMi::miSubsystemHealthStatusPoll(
@@ -613,8 +556,7 @@ void NVMeMi::miSubsystemHealthStatusPoll(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
 
         io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
@@ -625,14 +567,13 @@ void NVMeMi::miSubsystemHealthStatusPoll(
 
     try
     {
-        post([self{shared_from_this()}, cb{std::move(cb)}]() {
+        post([self{shared_from_this()}, ep{endpoint}, cb{std::move(cb)}]() {
             nvme_mi_nvm_ss_health_status ss_health;
             auto rc = nvme_mi_mi_subsystem_health_status_poll(self->nvmeEP,
                                                               true, &ss_health);
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << " fail to subsystem_health_status_poll: "
                           << std::strerror(errno) << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
@@ -645,8 +586,7 @@ void NVMeMi::miSubsystemHealthStatusPoll(
             {
                 std::string_view errMsg =
                     statusToString(static_cast<nvme_mi_resp_status>(rc));
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << " fail to subsystem_health_status_poll: " << errMsg
                           << std::endl;
                 self->io.post([cb{std::move(cb)}]() {
@@ -663,9 +603,7 @@ void NVMeMi::miSubsystemHealthStatusPoll(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
-                  << std::endl;
+        std::cerr << "[" << device->describe() << "]" << e.what() << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device), {});
         });
@@ -679,8 +617,7 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
 
         io.post(
@@ -690,12 +627,11 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
 
     try
     {
-        post([self{shared_from_this()}, cb{std::move(cb)}]() {
+        post([self{shared_from_this()}, ep{endpoint}, cb{std::move(cb)}]() {
             int rc = nvme_mi_scan_ep(self->nvmeEP, true);
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to scan controllers: "
                           << std::strerror(errno) << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
@@ -708,8 +644,7 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
             {
                 std::string_view errMsg =
                     statusToString(static_cast<nvme_mi_resp_status>(rc));
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to scan controllers: " << errMsg
                           << std::endl;
                 self->io.post([cb{std::move(cb)}]() {
@@ -730,8 +665,7 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
+        std::cerr << "[" << endpoint->describe() << "]" << e.what()
                   << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device), {});
@@ -763,8 +697,7 @@ void NVMeMi::adminIdentify(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
         io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
             cb(makeLibNVMeError("nvme endpoint is degraded"), {});
@@ -773,7 +706,7 @@ void NVMeMi::adminIdentify(
     }
     try
     {
-        post([ctrl, cns, nsid, cntid, self{shared_from_this()},
+        post([ctrl, cns, nsid, cntid, self{shared_from_this()}, ep{endpoint},
               cb{std::move(cb)}]() {
             int rc = 0;
             std::vector<uint8_t> data;
@@ -821,8 +754,7 @@ void NVMeMi::adminIdentify(
 
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to do nvme identify: "
                           << std::strerror(errno) << std::endl;
             }
@@ -830,8 +762,7 @@ void NVMeMi::adminIdentify(
             {
                 std::string_view errMsg =
                     statusToString(static_cast<nvme_mi_resp_status>(rc));
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to do nvme identify: " << errMsg
                           << std::endl;
             }
@@ -852,8 +783,7 @@ void NVMeMi::adminIdentify(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
+        std::cerr << "[" << endpoint->describe() << "]" << e.what()
                   << std::endl;
         auto msg = std::string("Runtime error: ") + e.what();
         std::cerr << msg << std::endl;
@@ -915,8 +845,7 @@ void NVMeMi::getTelemetryLogChunk(
 {
     if (offset >= data.size())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << "get telemetry log: offset exceed the log size. "
                   << "offset: " << offset << ", size: " << data.size()
                   << std::endl;
@@ -944,8 +873,7 @@ void NVMeMi::getTelemetryLogChunk(
 
         if (rc < 0)
         {
-            std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                      << ", eid: " << static_cast<int>(self->eid) << "]"
+            std::cerr << "[" << self->device->describe() << "]"
                       << "fail to get chunk for telemetry log: "
                       << std::strerror(errno) << std::endl;
             boost::asio::post(self->io,
@@ -959,8 +887,7 @@ void NVMeMi::getTelemetryLogChunk(
         {
             std::string_view errMsg =
                 statusToString(static_cast<nvme_mi_resp_status>(rc));
-            std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                      << ", eid: " << static_cast<int>(self->eid) << "]"
+            std::cerr << "[" << self->device->describe() << "]"
                       << "fail to get chunk for telemetry log: " << errMsg
                       << std::endl;
             boost::asio::post(self->io, [cb{std::move(cb)}]() {
@@ -996,8 +923,7 @@ void NVMeMi::adminGetLogPage(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
         io.post(
             [cb{std::move(cb)}, errc{degraded.value()}]() { cb(errc, {}); });
@@ -1006,7 +932,7 @@ void NVMeMi::adminGetLogPage(
 
     try
     {
-        post([ctrl, nsid, lid, lsp, lsi, self{shared_from_this()},
+        post([ctrl, nsid, lid, lsp, lsi, self{shared_from_this()}, ep{endpoint},
               cb{std::move(cb)}]() {
             std::vector<uint8_t> data;
             std::function<void(void)> logHandler;
@@ -1027,10 +953,8 @@ void NVMeMi::adminGetLogPage(
                     rc = nvme_mi_admin_get_log_error(ctrl, num, false, log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get error log" << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get error log" << std::endl;
                         break;
                     }
                 }
@@ -1043,10 +967,8 @@ void NVMeMi::adminGetLogPage(
                     rc = nvme_mi_admin_get_log_smart(ctrl, nsid, false, log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get smart log" << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get smart log" << std::endl;
                         break;
                     }
                 }
@@ -1059,10 +981,8 @@ void NVMeMi::adminGetLogPage(
                     rc = nvme_mi_admin_get_log_fw_slot(ctrl, false, log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get firmware slot" << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get firmware slot" << std::endl;
                         break;
                     }
                 }
@@ -1079,11 +999,9 @@ void NVMeMi::adminGetLogPage(
                                                            log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get cmd supported and effects log"
-                            << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get cmd supported and effects log"
+                                  << std::endl;
                         break;
                     }
                 }
@@ -1096,10 +1014,9 @@ void NVMeMi::adminGetLogPage(
                     rc = nvme_mi_admin_get_log_device_self_test(ctrl, log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get device self test log" << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get device self test log"
+                                  << std::endl;
                         break;
                     }
                 }
@@ -1113,11 +1030,9 @@ void NVMeMi::adminGetLogPage(
                                                                log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get changed namespace list"
-                            << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get changed namespace list"
+                                  << std::endl;
                         break;
                     }
                 }
@@ -1153,12 +1068,10 @@ void NVMeMi::adminGetLogPage(
                                                                log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get reservation "
-                               "notification log"
-                            << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get reservation "
+                                     "notification log"
+                                  << std::endl;
                         break;
                     }
                 }
@@ -1172,19 +1085,16 @@ void NVMeMi::adminGetLogPage(
                     int rc = nvme_mi_admin_get_log_sanitize(ctrl, false, log);
                     if (rc)
                     {
-                        std::cerr
-                            << "[bus: " << self->bus << ", addr: " << self->addr
-                            << ", eid: " << static_cast<int>(self->eid) << "]"
-                            << "fail to get sanitize status log" << std::endl;
+                        std::cerr << "[" << ep->describe() << "]"
+                                  << "fail to get sanitize status log"
+                                  << std::endl;
                         break;
                     }
                 }
                 break;
                 default:
                 {
-                    std::cerr << "[bus: " << self->bus
-                              << ", addr: " << self->addr
-                              << ", eid: " << static_cast<int>(self->eid) << "]"
+                    std::cerr << "[" << ep->describe() << "]"
                               << "unknown lid for GetLogPage" << std::endl;
                     rc = -1;
                     errno = EINVAL;
@@ -1193,8 +1103,7 @@ void NVMeMi::adminGetLogPage(
 
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to get log page: " << std::strerror(errno)
                           << std::endl;
                 logHandler = [cb{std::move(cb)}, last_errno{errno}]() {
@@ -1206,8 +1115,7 @@ void NVMeMi::adminGetLogPage(
             {
                 std::string_view errMsg =
                     statusToString(static_cast<nvme_mi_resp_status>(rc));
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to get log pag: " << errMsg << std::endl;
                 logHandler = [cb{std::move(cb)}]() {
                     cb(std::make_error_code(std::errc::bad_message), {});
@@ -1227,8 +1135,7 @@ void NVMeMi::adminGetLogPage(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << endpoint->describe() << "]"
                   << "NVMeMi adminGetLogPage throws: " << e.what() << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device), {});
@@ -1245,8 +1152,7 @@ void NVMeMi::adminXfer(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
         io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
             cb(errc, {}, {});
@@ -1260,8 +1166,8 @@ void NVMeMi::adminXfer(
         memcpy(req.data(), &admin_req, sizeof(nvme_mi_admin_req_hdr));
         memcpy(req.data() + sizeof(nvme_mi_admin_req_hdr), data.data(),
                data.size());
-        post([ctrl, req{std::move(req)}, self{shared_from_this()}, timeout_ms,
-              cb{std::move(cb)}]() mutable {
+        post([ctrl, req{std::move(req)}, self{shared_from_this()}, ep{endpoint},
+              timeout_ms, cb{std::move(cb)}]() mutable {
             int rc = 0;
 
             nvme_mi_admin_req_hdr* reqHeader =
@@ -1288,8 +1194,7 @@ void NVMeMi::adminXfer(
 
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "failed to nvme_mi_admin_xfer" << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
                     cb(std::make_error_code(static_cast<std::errc>(last_errno)),
@@ -1313,8 +1218,7 @@ void NVMeMi::adminXfer(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
+        std::cerr << "[" << endpoint->describe() << "]" << e.what()
                   << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device), {}, {});
@@ -1329,8 +1233,7 @@ void NVMeMi::adminFwCommit(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
         io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
             cb(errc, nvme_status_field::NVME_SC_MASK);
@@ -1345,13 +1248,12 @@ void NVMeMi::adminFwCommit(
         args.action = action;
         args.slot = slot;
         args.bpid = bpid;
-        io.post([ctrl, args, cb{std::move(cb)},
+        io.post([ctrl, args, cb{std::move(cb)}, ep{endpoint},
                  self{shared_from_this()}]() mutable {
             int rc = nvme_mi_admin_fw_commit(ctrl, &args);
             if (rc < 0)
             {
-                std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                          << ", eid: " << static_cast<int>(self->eid) << "]"
+                std::cerr << "[" << ep->describe() << "]"
                           << "fail to nvme_mi_admin_fw_commit: "
                           << std::strerror(errno) << std::endl;
                 self->io.post([cb{std::move(cb)}, last_errno{errno}]() {
@@ -1389,8 +1291,7 @@ void NVMeMi::adminFwCommit(
     }
     catch (const std::runtime_error& e)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]" << e.what()
+        std::cerr << "[" << endpoint->describe() << "]" << e.what()
                   << std::endl;
         io.post([cb{std::move(cb)}]() {
             cb(std::make_error_code(std::errc::no_such_device),
@@ -1407,8 +1308,7 @@ void NVMeMi::adminFwDownloadChunk(
 {
     if (auto degraded = isEndpointDegraded())
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << " MCTP connection is not established" << std::endl;
         io.post([cb{std::move(cb)}, errc{degraded.value()}]() {
             cb(errc, nvme_status_field::NVME_SC_MASK);
@@ -1551,8 +1451,7 @@ void NVMeMi::adminSecuritySend(
     });
     if (post_err)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << "adminSecuritySend post failed: " << post_err << std::endl;
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1); });
     }
@@ -1592,8 +1491,7 @@ void NVMeMi::adminSecurityReceive(
 
         if (args.data_len > maxNVMeMILength)
         {
-            std::cerr << "[bus: " << self->bus << ", addr: " << self->addr
-                      << ", eid: " << static_cast<int>(self->eid) << "]"
+            std::cerr << "[" << self->device->describe() << "]"
                       << "nvme_mi_admin_security_send returned excess data, "
                       << args.data_len << std::endl;
             self->io.post([cb]() {
@@ -1612,8 +1510,7 @@ void NVMeMi::adminSecurityReceive(
     });
     if (post_err)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << "adminSecurityReceive post failed: " << post_err
                   << std::endl;
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, {}); });
@@ -1642,8 +1539,7 @@ void NVMeMi::adminNonDataCmd(
     });
     if (post_err)
     {
-        std::cerr << "[bus: " << bus << ", addr: " << addr
-                  << ", eid: " << static_cast<int>(eid) << "]"
+        std::cerr << "[" << device->describe() << "]"
                   << "adminNonDataCmd post failed: " << post_err << std::endl;
         io.post([cb{std::move(cb)}, post_err]() { cb(post_err, -1, 0); });
     }
