@@ -304,10 +304,14 @@ void NVMeSubsystem::markFunctional(bool toggle)
         }
 
         // Tell the controllers they mustn't post further jobs
-        primaryController->disable();
+        if (primaryController)
+        {
+            primaryController->stop();
+        }
+
         for (auto& [_, v] : controllers)
         {
-            v.first->disable();
+            v.first->stop();
         }
 
         // Avoid triggering C*V D-Bus updates by clearing internal state
@@ -796,7 +800,6 @@ sdbusplus::message::object_path
     auto prog_id = getRandomId();
 
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -922,7 +925,6 @@ void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
     }
 
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -988,7 +990,6 @@ void NVMeSubsystem::updateVolumes()
 {
     assert(status == Status::Start);
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -1033,7 +1034,6 @@ void NVMeSubsystem::fillDrive()
 {
     assert(status == Status::Start);
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -1234,7 +1234,6 @@ void NVMeSubsystem::querySupportedFormats()
 {
     assert(status == Status::Start);
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -1286,7 +1285,6 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
     }
 
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -1322,7 +1320,6 @@ void NVMeSubsystem::startSanitize(
     }
 
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
@@ -1345,7 +1342,6 @@ void NVMeSubsystem::sanitizeStatus(
     }
 
     auto pc = getPrimaryController();
-    assert(!pc->disabled());
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());

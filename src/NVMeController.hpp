@@ -44,6 +44,7 @@ class NVMeController
     virtual ~NVMeController();
 
     virtual void start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin);
+    virtual void stop();
 
     // set the target as a primary controller with secondary controller list
     // with it
@@ -72,20 +73,6 @@ class NVMeController
         return *reinterpret_cast<uint16_t*>(
             (reinterpret_cast<uint8_t*>(nvmeCtrl) +
              std::max(sizeof(uint16_t), sizeof(void*))));
-    }
-
-    /*
-     * Disable is called to prevent issuing further queries against the
-     * controller
-     */
-    void disable()
-    {
-        nvmeCtrl = nullptr;
-    }
-
-    bool disabled() const
-    {
-        return nvmeCtrl == nullptr;
     }
 
     /**
@@ -164,8 +151,17 @@ class NVMeControllerEnabled :
     ~NVMeControllerEnabled() override;
 
     void start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin) override;
+    void stop() override;
 
   private:
+    enum class Status
+    {
+        Disabled = 0, // the controller is not ready to serve DBus calls
+        Enabled = 1,  // the controller is ready to serve DBus calls
+    };
+
+    Status status = Status::Enabled;
+
     NVMeControllerEnabled(NVMeController&& nvmeController);
 
     void init();

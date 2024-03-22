@@ -50,15 +50,22 @@ void NVMeControllerEnabled::init()
             boost::asio::yield_context yield, uint8_t opcode, uint32_t cdw1,
             uint32_t cdw2, uint32_t cdw3, uint32_t cdw10, uint32_t cdw11,
             uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15) {
-        if (selfWeak.expired())
+        auto self = selfWeak.lock();
+        if (!self)
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
                               -1, "AdminNonDataCmd");
             return std::tuple<uint32_t, uint32_t, uint32_t>{0, 0, 0};
         }
-        return selfWeak.lock()->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2,
-                                                      cdw3, cdw10, cdw11, cdw12,
-                                                      cdw13, cdw14, cdw15);
+
+        if (self->status != Status::Enabled)
+        {
+            std::cerr << "Controller has been disabled" << std::endl;
+            throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+        }
+        return self->adminNonDataCmdMethod(yield, opcode, cdw1, cdw2, cdw3,
+                                           cdw10, cdw11, cdw12, cdw13, cdw14,
+                                           cdw15);
     });
     passthruInterface->initialize();
 
@@ -69,28 +76,43 @@ void NVMeControllerEnabled::init()
         [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
                                      uint8_t proto, uint16_t proto_specific,
                                      std::vector<uint8_t> data) {
-        if (selfWeak.expired())
+        auto self = selfWeak.lock();
+        if (!self)
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
                               -1, "SecuritySend");
             return;
         }
-        return selfWeak.lock()->securitySendMethod(yield, proto, proto_specific,
-                                                   data);
+
+        if (self->status != Status::Enabled)
+        {
+            std::cerr << "Controller has been disabled" << std::endl;
+            throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+        }
+
+        return self->securitySendMethod(yield, proto, proto_specific, data);
     });
     securityInterface->register_method(
         "SecurityReceive",
         [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
                                      uint8_t proto, uint16_t proto_specific,
                                      uint32_t transfer_length) {
-        if (selfWeak.expired())
+        auto self = selfWeak.lock();
+        if (!self)
         {
             checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
                               -1, "SecurityReceive");
             return std::vector<uint8_t>{};
         }
-        return selfWeak.lock()->securityReceiveMethod(
-            yield, proto, proto_specific, transfer_length);
+
+        if (self->status != Status::Enabled)
+        {
+            std::cerr << "Controller has been disabled" << std::endl;
+            throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+        }
+
+        return self->securityReceiveMethod(yield, proto, proto_specific,
+                                           transfer_length);
     });
 
     // StorageController interface is implemented manually to allow
@@ -99,21 +121,43 @@ void NVMeControllerEnabled::init()
         path, "xyz.openbmc_project.Inventory.Item.StorageController");
     ctrlInterface->register_method(
         "AttachVolume",
-        [weak{weak_from_this()}](boost::asio::yield_context yield,
-                                 sdbusplus::message::object_path volPath) {
-        if (auto self = weak.lock())
+        [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
+                                     sdbusplus::message::object_path volPath) {
+        auto self = selfWeak.lock();
+        if (!self)
         {
-            return self->attachVolume(yield, volPath);
+            checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
+                              -1, "SecurityReceive");
+            return;
         }
+
+        if (self->status != Status::Enabled)
+        {
+            std::cerr << "Controller has been disabled" << std::endl;
+            throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+        }
+
+        return self->attachVolume(yield, volPath);
     });
     ctrlInterface->register_method(
         "DetachVolume",
-        [weak{weak_from_this()}](boost::asio::yield_context yield,
-                                 sdbusplus::message::object_path volPath) {
-        if (auto self = weak.lock())
+        [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
+                                     sdbusplus::message::object_path volPath) {
+        auto self = selfWeak.lock();
+        if (!self)
         {
-            return self->detachVolume(yield, volPath);
+            checkLibNVMeError(std::make_error_code(std::errc::no_such_device),
+                              -1, "SecurityReceive");
+            return;
         }
+
+        if (self->status != Status::Enabled)
+        {
+            std::cerr << "Controller has been disabled" << std::endl;
+            throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
+        }
+
+        return self->detachVolume(yield, volPath);
     });
 
     ctrlInterface->initialize();
@@ -130,6 +174,12 @@ void NVMeControllerEnabled::start(
     std::shared_ptr<NVMeControllerPlugin> nvmePlugin)
 {
     this->NVMeController::start(std::move(nvmePlugin));
+    status = Status::Enabled;
+}
+
+void NVMeControllerEnabled::stop()
+{
+    status = Status::Disabled;
 }
 
 void NVMeController::createAssociation()
@@ -180,7 +230,7 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
                                                               uint8_t lsp,
                                                               uint16_t lsi)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -270,7 +320,7 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
 sdbusplus::message::unix_fd
     NVMeControllerEnabled::identify(uint8_t cns, uint32_t nsid, uint16_t cntid)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -329,7 +379,7 @@ void NVMeControllerEnabled::firmwareCommitAsync(uint8_t commitAction,
         throw sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed();
     }
 
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -430,6 +480,8 @@ void NVMeController::start(std::shared_ptr<NVMeControllerPlugin> nvmePlugin)
     plugin = nvmePlugin;
 }
 
+void NVMeController::stop() {}
+
 void NVMeController::setSecAssoc(
     const std::vector<std::shared_ptr<NVMeController>>& secCntrls)
 {
@@ -452,7 +504,7 @@ void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
                                                uint16_t proto_specific,
                                                std::span<uint8_t> data)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -481,7 +533,7 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
     boost::asio::yield_context yield, uint8_t proto, uint16_t proto_specific,
     uint32_t transfer_length)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -562,7 +614,7 @@ void NVMeControllerEnabled::attachVolume(
     boost::asio::yield_context yield,
     const sdbusplus::message::object_path& volumePath)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -601,7 +653,7 @@ void NVMeControllerEnabled::attachVolume(
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "attachVolume");
 
-    if (!disabled())
+    if (status == Status::Enabled)
     {
         if (auto s = subsys.lock())
         {
@@ -615,7 +667,7 @@ void NVMeControllerEnabled::detachVolume(
     boost::asio::yield_context yield,
     const sdbusplus::message::object_path& volumePath)
 {
-    if (disabled())
+    if (status != Status::Enabled)
     {
         std::cerr << "Controller has been disabled" << std::endl;
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
@@ -654,7 +706,7 @@ void NVMeControllerEnabled::detachVolume(
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "detachVolume");
 
-    if (!disabled())
+    if (status == Status::Enabled)
     {
         if (auto s = subsys.lock())
         {
