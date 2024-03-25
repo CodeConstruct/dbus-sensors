@@ -572,6 +572,151 @@ TEST_F(NVMeTest, TestDriveAbsent)
     io.run();
 }
 
+/**
+ * @brief Inject error during subsystem initialization process. The subsystem is
+ * expected to recover after the error
+ */
+TEST_F(NVMeTest, InitErrorInjection)
+{
+    using ::testing::_;
+    using ::testing::AnyNumber;
+    using ::testing::AtLeast;
+    using ::testing::Eq;
+    boost::asio::steady_timer timer(io);
+
+    EXPECT_CALL(mock, miSubsystemHealthStatusPoll).Times(AtLeast(1));
+    EXPECT_CALL(mock, miScanCtrl)
+        .WillOnce([](std::function<void(const std::error_code&,
+                                        const std::vector<nvme_mi_ctrl_t>&)>
+                         cb) {
+        cb(std::make_error_code(std::errc::no_such_device), {});
+    }).WillRepeatedly([&](auto&& cb) {
+        return mock.fake->miScanCtrl(std::forward<decltype(cb)>(cb));
+    });
+
+    EXPECT_CALL(mock, adminIdentify).Times(::testing::AnyNumber());
+
+    // Failed on the first query on id_sec_cntrl_list
+    EXPECT_CALL(
+        mock,
+        adminIdentify(
+            _, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_SECONDARY_CTRL_LIST), _,
+            _, _))
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminIdentify(std::forward<Args>(args)...);
+    });
+
+    // failed on first id_allocated_ns
+    EXPECT_CALL(
+        mock,
+        adminIdentify(_, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS),
+                      _, _, _))
+        .Times(AnyNumber()) // allow to run at 0 times based on given NS number
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminIdentify(std::forward<Args>(args)...);
+    });
+
+    // failed on first id_ns_cntrl
+    EXPECT_CALL(
+        mock,
+        adminIdentify(_, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_NS_CTRL_LIST),
+                      _, _, _))
+        .Times(AnyNumber()) // allow to run at 0 times based on given NS number
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminIdentify(std::forward<Args>(args)...);
+    });
+
+    // failed on first id_cntrl
+    EXPECT_CALL(mock,
+                adminIdentify(_, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL),
+                              _, _, _))
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminIdentify(std::forward<Args>(args)...);
+    });
+
+    // failed on first id_ns
+    EXPECT_CALL(
+        mock,
+        adminIdentify(_, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_NS), _, _, _))
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminIdentify(std::forward<Args>(args)...);
+    });
+
+    // Failed on list namespace
+    EXPECT_CALL(mock, adminListNamespaces)
+        .WillOnce([]<class... Args>(Args... args) -> void {
+        auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
+        return cb(
+            makeLibNVMeError(0, NVME_MI_RESP_INVALID_PARAM, "adminIdentify"),
+            {});
+    }).WillRepeatedly([&]<class... Args>(Args&&... args) {
+        return mock.fake->adminListNamespaces(std::forward<Args>(args)...);
+    });
+
+    // wait for subsystem initialization, each failure will introduce 1 second
+    // delay for retry
+    timer.expires_after(std::chrono::seconds(2 + 6));
+    timer.async_wait([&](boost::system::error_code) {
+        system_bus->async_method_call(
+            [&, this](boost::system::error_code, const GetSubTreeType& result) {
+            // Only PF and the enabled VF should be listed
+            EXPECT_EQ(result.size(), 2);
+            subsys->stop();
+
+            // wait for storage controller destruction.
+            timer.expires_after(std::chrono::seconds(1));
+            timer.async_wait([&](boost::system::error_code) {
+                system_bus->async_method_call(
+                    [&](boost::system::error_code,
+                        const GetSubTreeType& result) {
+                    // not storage controller should be listed.
+                    nlohmann::json j(result);
+                    EXPECT_EQ(result.size(), 0)
+                        << "The following interfaces remain after STOP: \n"
+                        << j.dump(2) << std::endl;
+                    io.stop();
+                },
+                    "xyz.openbmc_project.ObjectMapper",
+                    "/xyz/openbmc_project/object_mapper",
+                    "xyz.openbmc_project.ObjectMapper", "GetSubTree",
+                    subsys_path, 0,
+                    std::vector<std::string>{"xyz.openbmc_project.Inventory."
+                                             "Item.StorageController"});
+            });
+        },
+            "xyz.openbmc_project.ObjectMapper",
+            "/xyz/openbmc_project/object_mapper",
+            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
+            std::vector<std::string>{
+                "xyz.openbmc_project.Inventory.Item.StorageController"});
+    });
+    io.run();
+}
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
