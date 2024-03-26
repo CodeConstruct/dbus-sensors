@@ -10,6 +10,8 @@
 
 #include <dlfcn.h>
 
+#include <boost/asio/spawn.hpp>
+
 #include <charconv>
 #include <filesystem>
 #include <stdexcept>
@@ -81,7 +83,7 @@ NVMeSubsystem::NVMeSubsystem(boost::asio::io_context& io,
     NVMeStorage(objServer, *dynamic_cast<sdbusplus::bus_t*>(conn.get()),
                 path.c_str()),
     path(path), io(io), objServer(objServer), conn(conn), name(name),
-    config(configData), nvmeIntf(intf), status(Status::Stop), isPresent(false)
+    config(configData), nvmeIntf(intf), status(Status::Stop)
 {}
 
 // Performs initialisation after shared_from_this() has been set up.
@@ -108,6 +110,12 @@ void NVMeSubsystem::init()
     NVMeStorage::init(
         std::static_pointer_cast<NVMeStorage>(shared_from_this()));
 
+    /* xyz.openbmc_project.Inventory.Item.Drive */
+    drive = std::make_shared<NVMeDrive>(io, conn, path, weak_from_this());
+    drive->protocol(NVMeDrive::DriveProtocol::NVMe);
+    drive->type(NVMeDrive::DriveType::SSD);
+    // TODO: update capacity
+
     // make association for Drive/Storage/Chassis
     createAssociation();
 }
@@ -115,71 +123,6 @@ void NVMeSubsystem::init()
 NVMeSubsystem::~NVMeSubsystem()
 {
     objServer.remove_interface(assocIntf);
-    objServer.remove_interface(presentIntf);
-}
-
-void NVMeSubsystem::updatePresence(const std::error_code& ec, bool present)
-{
-    if (ec)
-    {
-        std::cerr << name << " plugin checkPresence failed: " << ec.message()
-                  << std::endl;
-        isPresent = false;
-    }
-    else
-    {
-        isPresent = present;
-    }
-
-    // DBus Interface: xyz.openbmc_project.Inventory.Item
-    if (!presentIntf)
-    {
-        presentIntf =
-            objServer.add_interface(path, "xyz.openbmc_project.Inventory.Item");
-        presentIntf->register_property("Present", isPresent);
-        presentIntf->initialize();
-    }
-    else
-    {
-        presentIntf->set_property("Present", isPresent);
-    }
-
-    std::cerr << name << " drive isPresent: " << isPresent << std::endl;
-
-    // DBus Interface: xyz.openbmc_project.Inventory.Item.Drive
-    if (!drive)
-    {
-        drive = std::make_shared<NVMeDrive>(io, conn, path, weak_from_this());
-        drive->protocol(NVMeDrive::DriveProtocol::NVMe);
-        drive->type(NVMeDrive::DriveType::SSD);
-    }
-    fillDrive();
-}
-
-void NVMeSubsystem::checkPresence()
-{
-    bool findPlugin = false;
-    // find primary controller plugin and checkPresent
-    for (auto& [_, pair] : controllers)
-    {
-        std::shared_ptr<NVMeControllerPlugin> ctrlPlugin = pair.second;
-        if (ctrlPlugin && ctrlPlugin->isPrimary())
-        {
-            ctrlPlugin->checkPresent(
-                [self{shared_from_this()}](const std::error_code& ec,
-                                           bool present) {
-                self->updatePresence(ec, present);
-            });
-            findPlugin = true;
-            break;
-        }
-    }
-
-    if (!findPlugin)
-    {
-        // Assumes present in case we didn't find any (primary) plugin
-        updatePresence({}, true);
-    }
 }
 
 void NVMeSubsystem::processSecondaryControllerList(
@@ -236,29 +179,44 @@ void NVMeSubsystem::processSecondaryControllerList(
     }
     primaryController->setPrimary(secCntrls);
 
-    // start controller
-    for (auto& [_, pair] : controllers)
-    {
-        // create controller plugin
-        if (plugin)
+    boost::asio::spawn(
+        io, [self{shared_from_this()}](boost::asio::yield_context yield) {
+        try
         {
-            pair.second = plugin->createControllerPlugin(*pair.first, config);
+            self->fillDrive(yield);
+            self->updateVolumes(yield);
+            self->querySupportedFormats(yield);
+            std::cerr << "finished NS enum" << std::endl;
         }
-        pair.first->start(pair.second);
-    }
-    // start plugin
-    if (plugin)
-    {
-        plugin->start();
-    }
-    status = Status::Start;
+        catch (const std::exception& e)
+        {
+            std::cerr << std::format("[{}]failed starting the subsystem: {}",
+                                     self->name, e.what())
+                      << std::endl;
+            self->status = Status::Aborting;
+            self->markFunctional(false);
+            self->markAvailable(false);
+            return;
+        }
+        // start controller
+        for (auto& [_, pair] : self->controllers)
+        {
+            // create controller plugin
+            if (self->plugin)
+            {
+                pair.second = self->plugin->createControllerPlugin(
+                    *pair.first, self->config);
+            }
+            pair.first->start(pair.second);
+        }
+        // start plugin
+        if (self->plugin)
+        {
+            self->plugin->start();
+        }
 
-    checkPresence();
-
-    // TODO: may need to wait for this to complete?
-    updateVolumes();
-
-    querySupportedFormats();
+        self->status = Status::Start;
+    });
 }
 
 void NVMeSubsystem::markFunctional(bool toggle)
@@ -921,155 +879,195 @@ std::string NVMeSubsystem::volumePath(uint32_t nsid) const
     return path + "/volumes/" + std::to_string(nsid);
 }
 
-void NVMeSubsystem::addIdentifyNamespace(uint32_t nsid)
+void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
+                                         uint32_t nsid)
 {
-    if (status != Status::Start)
-    {
-        std::cerr << "Subsystem not in Start state, have "
-                  << static_cast<int>(status) << std::endl;
-        return;
-    }
+    assert((status == Status::Start || status == Status::Intiatilzing) &&
+           std::format("Subsystem not in Start state, have {}",
+                       static_cast<int>(status))
+               .c_str());
 
     auto pc = getPrimaryController();
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
-    intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS,
-                        nsid, NVME_CNTLID_NONE,
-                        [self{shared_from_this()}, intf, ctrl,
-                         nsid](nvme_ex_ptr ex, std::span<uint8_t> data) {
-        if (ex)
-        {
-            std::cerr << "Error adding volume for nsid " << nsid << ": " << ex
-                      << "\n";
-            return;
-        }
 
-        nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
+    using admin_identify_t = void(std::tuple<nvme_ex_ptr, std::span<uint8_t>>);
 
-        // msb 6:5 and lsb 3:0
-        size_t lbaf_index = ((id.flbas >> 1) & 0x30) | (id.flbas & 0x0f);
-        size_t blockSize = 1ul << id.lbaf[lbaf_index].ds;
-        bool metadataAtEnd = id.flbas & (1 << 4);
+    auto [ex, data] = boost::asio::async_initiate<boost::asio::yield_context,
+                                                  admin_identify_t>(
+        [intf, ctrl, nsid](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+        intf->adminIdentify(
+            ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_ALLOCATED_NS, nsid,
+            NVME_CNTLID_NONE,
+            [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
+            h(std::make_tuple(ex, data));
+        });
+    },
+        yield);
 
-        NVMeNSIdentify ns = {
-            .namespaceId = nsid,
-            .size = ::le64toh(id.nsze * blockSize),
-            .capacity = ::le64toh(id.ncap * blockSize),
-            .blockSize = blockSize,
-            .lbaFormat = lbaf_index,
-            .metadataAtEnd = metadataAtEnd,
-        };
+    if (ex)
+    {
+        throw *ex;
+    }
 
-        self->addVolume(ns);
+    nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
 
-        // determine attached controllers
+    // msb 6:5 and lsb 3:0
+    size_t lbaf_index = ((id.flbas >> 1) & 0x30) | (id.flbas & 0x0f);
+    size_t blockSize = 1ul << id.lbaf[lbaf_index].ds;
+    bool metadataAtEnd = id.flbas & (1 << 4);
+
+    NVMeNSIdentify ns = {
+        .namespaceId = nsid,
+        .size = ::le64toh(id.nsze * blockSize),
+        .capacity = ::le64toh(id.ncap * blockSize),
+        .blockSize = blockSize,
+        .lbaFormat = lbaf_index,
+        .metadataAtEnd = metadataAtEnd,
+    };
+
+    addVolume(ns);
+
+    // determine attached controllers
+    std::tie(ex, data) = boost::asio::async_initiate<boost::asio::yield_context,
+                                                     admin_identify_t>(
+        [intf, ctrl, nsid](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
         intf->adminIdentify(
             ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS_CTRL_LIST, nsid,
             NVME_CNTLID_NONE,
-            [self, nsid](nvme_ex_ptr ex, std::span<uint8_t> data) {
-            if (ex)
-            {
-                std::cerr << "Error fetching attached controller list for nsid "
-                          << nsid << ": " << ex << "\n";
-                return;
-            }
-
-            nvme_ctrl_list& list =
-                *reinterpret_cast<nvme_ctrl_list*>(data.data());
-            uint16_t num = ::le16toh(list.num);
-            if (num == NVME_ID_CTRL_LIST_MAX)
-            {
-                std::cerr << "Warning: full ctrl list returned\n";
-            }
-
-            for (auto i = 0; i < num; i++)
-            {
-                uint16_t c = ::le16toh(list.identifier[i]);
-                self->attachCtrlVolume(c, nsid);
-            }
+            [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
+            h(std::make_tuple(ex, data));
         });
-    });
+    },
+        yield);
+
+    if (ex)
+    {
+        throw *ex;
+    }
+
+    nvme_ctrl_list& list = *reinterpret_cast<nvme_ctrl_list*>(data.data());
+    uint16_t num = ::le16toh(list.num);
+    if (num == NVME_ID_CTRL_LIST_MAX)
+    {
+        std::cerr << "Warning: full ctrl list returned\n";
+    }
+
+    for (auto i = 0; i < num; i++)
+    {
+        uint16_t c = ::le16toh(list.identifier[i]);
+        attachCtrlVolume(c, nsid);
+    }
 }
 
-void NVMeSubsystem::updateVolumes()
+void NVMeSubsystem::updateVolumes(boost::asio::yield_context yield)
 {
-    assert(status == Status::Start);
+    assert((status == Status::Start || status == Status::Intiatilzing) &&
+           std::format("Subsystem not in Start state, have {}",
+                       static_cast<int>(status))
+               .c_str());
+
     auto pc = getPrimaryController();
     nvme_mi_ctrl_t ctrl = getPrimaryController()->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
-    intf->adminListNamespaces(
-        ctrl, [ctrl, intf, self{shared_from_this()}](
-                  nvme_ex_ptr ex, std::vector<uint32_t> ns) mutable {
-        if (ex)
-        {
-            std::cerr << "list namespaces failed: " << ex << "\n";
-            return;
-        }
+    using admin_list_ns_t =
+        void(std::tuple<nvme_ex_ptr, std::vector<uint32_t>>);
+    auto [ex, ns] = boost::asio::async_initiate<boost::asio::yield_context,
+                                                admin_list_ns_t>(
+        [intf, ctrl](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+        intf->adminListNamespaces(
+            ctrl, [h](nvme_ex_ptr ex, std::vector<uint32_t> ns) mutable {
+            h(std::make_tuple(ex, ns));
+        });
+    },
+        yield);
 
-        std::vector<uint32_t> existing;
-        for (auto& [n, _] : self->volumes)
-        {
-            existing.push_back(n);
-        }
+    if (ex)
+    {
+        throw *ex;
+    }
 
-        std::vector<uint32_t> additions;
-        std::vector<uint32_t> deletions;
+    std::vector<uint32_t> existing;
+    for (auto& [n, _] : volumes)
+    {
+        existing.push_back(n);
+    }
 
-        // namespace lists are ordered
-        std::set_difference(ns.begin(), ns.end(), existing.begin(),
-                            existing.end(), std::back_inserter(additions));
+    std::vector<uint32_t> additions;
+    std::vector<uint32_t> deletions;
 
-        std::set_difference(existing.begin(), existing.end(), ns.begin(),
-                            ns.end(), std::back_inserter(deletions));
+    // namespace lists are ordered
+    std::set_difference(ns.begin(), ns.end(), existing.begin(), existing.end(),
+                        std::back_inserter(additions));
 
-        for (auto n : deletions)
-        {
-            self->forgetVolume(self->volumes.find(n)->second);
-        }
+    std::set_difference(existing.begin(), existing.end(), ns.begin(), ns.end(),
+                        std::back_inserter(deletions));
 
-        for (auto n : additions)
-        {
-            self->addIdentifyNamespace(n);
-        }
-    });
+    std::cerr << std::format(
+        "[{}]subsystem enum {} NS, {} will be added, {} will be deleted\n",
+        name, ns.size(), additions.size(), deletions.size());
+
+    for (auto n : deletions)
+    {
+        forgetVolume(volumes.find(n)->second);
+    }
+
+    for (auto n : additions)
+    {
+        addIdentifyNamespace(yield, n);
+    }
 }
 
-void NVMeSubsystem::fillDrive()
+void NVMeSubsystem::fillDrive(boost::asio::yield_context yield)
 {
-    assert(status == Status::Start);
+    assert(status == Status::Intiatilzing);
     auto pc = getPrimaryController();
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
-    intf->adminIdentify(ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL,
-                        NVME_NSID_NONE, NVME_CNTLID_NONE,
-                        [self{shared_from_this()}, intf,
-                         ctrl](nvme_ex_ptr ex, std::span<uint8_t> data) {
-        if (ex)
-        {
-            std::cerr << self->name << ": Error for controller identify\n";
-            return;
-        }
 
-        nvme_id_ctrl& id = *reinterpret_cast<nvme_id_ctrl*>(data.data());
-        self->drive->serialNumber(nvmeString(id.sn, sizeof(id.sn)));
-        self->drive->model(nvmeString(id.mn, sizeof(id.mn)));
+    using admin_identify_t = void(std::tuple<nvme_ex_ptr, std::span<uint8_t>>);
 
-        auto fwVer = nvmeString(id.fr, sizeof(id.fr));
-        if (!fwVer.empty())
-        {
-            // Formatting per
-            // https://gerrit.openbmc.org/c/openbmc/phosphor-dbus-interfaces/+/43458/2/xyz/openbmc_project/Software/Version.interface.yaml#47
-            // TODO find/write a better reference
-            std::string v("xyz.openbmc_project.NVMe.ControllerFirmwareVersion");
-            auto pc = self->getPrimaryController();
-            pc->version(v);
-            pc->purpose(SoftwareVersion::VersionPurpose::Other);
-            pc->extendedVersion(v + ":" + fwVer);
-        }
-    });
+    auto [ex, data] = boost::asio::async_initiate<boost::asio::yield_context,
+                                                  admin_identify_t>(
+        [intf, ctrl](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+        intf->adminIdentify(
+            ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_CTRL, NVME_NSID_NONE,
+            NVME_CNTLID_NONE,
+            [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
+            h(std::make_tuple(ex, data));
+        });
+    },
+        yield);
+
+    if (ex)
+    {
+        throw std::runtime_error(
+            std::format("{}: Error for controller identify", name));
+    }
+
+    nvme_id_ctrl& id = *reinterpret_cast<nvme_id_ctrl*>(data.data());
+    drive->serialNumber(nvmeString(id.sn, sizeof(id.sn)));
+    drive->model(nvmeString(id.mn, sizeof(id.mn)));
+
+    auto fwVer = nvmeString(id.fr, sizeof(id.fr));
+    if (!fwVer.empty())
+    {
+        // Formatting per
+        // https://gerrit.openbmc.org/c/openbmc/phosphor-dbus-interfaces/+/43458/2/xyz/openbmc_project/Software/Version.interface.yaml#47
+        // TODO find/write a better reference
+        std::string v("xyz.openbmc_project.NVMe.ControllerFirmwareVersion");
+        auto pc = getPrimaryController();
+        pc->version(v);
+        pc->purpose(SoftwareVersion::VersionPurpose::Other);
+        pc->extendedVersion(v + ":" + fwVer);
+    }
 }
 
 std::shared_ptr<NVMeVolume> NVMeSubsystem::getVolume(
@@ -1124,21 +1122,19 @@ std::vector<uint32_t> NVMeSubsystem::attachedVolumes(uint16_t ctrlId) const
 
 void NVMeSubsystem::attachCtrlVolume(uint16_t c, uint32_t ns)
 {
-    if (status != Status::Start)
-    {
-        std::cerr << "Subsystem is not in Start state: "
-                  << static_cast<int>(status) << std::endl;
-        return;
-    }
+    assert((status == Status::Start || status == Status::Intiatilzing) &&
+           std::format("Subsystem not in Start state, have {}",
+                       static_cast<int>(status))
+               .c_str());
+
     if (!controllers.contains(c))
     {
-        std::cerr << "attachCtrlVolume bad controller " << c << std::endl;
-        return;
+        throw std::runtime_error(
+            std::format("attachCtrlVolume bad controller {}", c));
     }
     if (!volumes.contains(ns))
     {
-        std::cerr << "attachCtrlVolume bad ns " << ns << std::endl;
-        return;
+        throw std::runtime_error(std::format("attachCtrlVolume bad ns {}", ns));
     }
     attached[c].insert(ns);
     std::cout << name << " attached insert " << c << " " << ns << "\n";
@@ -1147,21 +1143,19 @@ void NVMeSubsystem::attachCtrlVolume(uint16_t c, uint32_t ns)
 
 void NVMeSubsystem::detachCtrlVolume(uint16_t c, uint32_t ns)
 {
-    if (status != Status::Start)
-    {
-        std::cerr << "Subsystem is not in Start state: "
-                  << static_cast<int>(status) << std::endl;
-        return;
-    }
+    assert(status == Status::Start &&
+           std::format("Subsystem is not in Start state: {}",
+                       static_cast<int>(status))
+               .c_str());
+
     if (!controllers.contains(c))
     {
-        std::cerr << "detachCtrlVolume bad controller " << c << std::endl;
-        return;
+        throw std::runtime_error(
+            std::format("detachCtrlVolume bad controller {}", c));
     }
     if (!volumes.contains(ns))
     {
-        std::cerr << "detachCtrlVolume bad ns " << ns << std::endl;
-        return;
+        throw std::runtime_error(std::format("detachCtrlVolume bad ns {}", ns));
     }
     attached[c].erase(ns);
     std::cout << name << " attached erase " << c << " " << ns << "\n";
@@ -1170,16 +1164,14 @@ void NVMeSubsystem::detachCtrlVolume(uint16_t c, uint32_t ns)
 
 void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
 {
-    if (status != Status::Start)
-    {
-        std::cerr << "Subsystem is not in Start state: "
-                  << static_cast<int>(status) << std::endl;
-        return;
-    }
+    assert(status == Status::Start &&
+           std::format("Subsystem is not in Start state: {}",
+                       static_cast<int>(status))
+               .c_str());
+
     if (!volumes.contains(ns))
     {
-        std::cerr << "detachAllCtrlVolume bad ns " << ns << std::endl;
-        return;
+        throw std::runtime_error(std::format("detachCtrlVolume bad ns {}", ns));
     }
     // remove from attached controllers list
     for (auto& [c, attach_vols] : attached)
@@ -1194,7 +1186,10 @@ void NVMeSubsystem::detachAllCtrlVolume(uint32_t ns)
 // Will throw a nvme_ex_ptr if the NS already exists */
 std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
 {
-    assert(status == Status::Start);
+    assert((status == Status::Start || status == Status::Intiatilzing) &&
+           std::format("Subsystem not in Start state, have {}",
+                       static_cast<int>(status))
+               .c_str());
 
     if (volumes.contains(ns.namespaceId))
     {
@@ -1229,57 +1224,69 @@ void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
 
     if (volumes.erase(volume->namespaceId()) != 1)
     {
-        std::cerr << "volume " << volume->namespaceId()
-                  << " disappeared unexpectedly\n";
+        throw std::runtime_error(std::format(
+            "volume {} disappeared unexpectedly", volume->namespaceId()));
     }
 
     updateAssociation();
 }
 
-void NVMeSubsystem::querySupportedFormats()
+void NVMeSubsystem::querySupportedFormats(boost::asio::yield_context yield)
 {
-    assert(status == Status::Start);
+    assert((status == Status::Start || status == Status::Intiatilzing) &&
+           std::format("Subsystem not in Start state, have {}",
+                       static_cast<int>(status))
+               .c_str());
+
     auto pc = getPrimaryController();
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
 
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
-    intf->adminIdentify(
-        ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS, NVME_NSID_ALL,
-        NVME_CNTLID_NONE,
-        [self{shared_from_this()}](nvme_ex_ptr ex, std::span<uint8_t> data) {
-        if (ex)
-        {
-            std::cerr << self->name << ": Error getting LBA formats :" << ex
-                      << "\n";
-            return;
-        }
 
-        nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
+    using admin_identify_t = void(std::tuple<nvme_ex_ptr, std::span<uint8_t>>);
+    auto [ex, data] = boost::asio::async_initiate<boost::asio::yield_context,
+                                                  admin_identify_t>(
+        [intf, ctrl](auto&& handler) {
+        auto h = asio_helper::CopyableCallback(std::move(handler));
+        intf->adminIdentify(
+            ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_NS, NVME_NSID_ALL,
+            NVME_CNTLID_NONE,
+            [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
+            h(std::make_tuple(ex, data));
+        });
+    },
+        yield);
 
-        // nlbaf is 0’s based
-        size_t nlbaf = id.nlbaf + 1;
-        if (nlbaf > 64)
-        {
-            std::cerr << self->name << ": Bad nlbaf " << nlbaf << "\n";
-            return;
-        }
+    if (ex)
+    {
+        throw std::runtime_error(
+            std::format("{}: Error getting LBA formats :{}", name, ex->what()));
+    }
 
-        std::cerr << self->name << ": Got nlbaf " << nlbaf << "\n";
-        std::vector<LBAFormat> formats;
-        for (size_t i = 0; i < nlbaf; i++)
-        {
-            size_t blockSize = 1ul << id.lbaf[i].ds;
-            size_t metadataSize = id.lbaf[i].ms;
-            RelPerf rp = relativePerformanceFromRP(id.lbaf[i].rp);
-            std::cerr << self->name << ": lbaf " << i << " blocksize "
-                      << blockSize << "\n";
-            formats.push_back({.index = i,
-                               .blockSize = blockSize,
-                               .metadataSize = metadataSize,
-                               .relativePerformance = rp});
-        }
-        self->setSupportedFormats(formats);
-    });
+    nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
+
+    // nlbaf is 0’s based
+    size_t nlbaf = id.nlbaf + 1;
+    if (nlbaf > 64)
+    {
+        throw std::runtime_error(std::format("{}: Bad nlbaf {}", name, nlbaf));
+    }
+
+    std::cerr << name << ": Got nlbaf " << nlbaf << "\n";
+    std::vector<LBAFormat> formats;
+    for (size_t i = 0; i < nlbaf; i++)
+    {
+        size_t blockSize = 1ul << id.lbaf[i].ds;
+        size_t metadataSize = id.lbaf[i].ms;
+        RelPerf rp = relativePerformanceFromRP(id.lbaf[i].rp);
+        std::cerr << name << ": lbaf " << i << " blocksize " << blockSize
+                  << "\n";
+        formats.push_back({.index = i,
+                           .blockSize = blockSize,
+                           .metadataSize = metadataSize,
+                           .relativePerformance = rp});
+    }
+    setSupportedFormats(formats);
 }
 
 void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,

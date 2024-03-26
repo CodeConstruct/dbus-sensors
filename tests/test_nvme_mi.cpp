@@ -78,6 +78,14 @@ class NVMeMiMock :
         });
         ON_CALL(*this, adminSecuritySend).WillByDefault([]() { return; });
         ON_CALL(*this, adminSecurityReceive).WillByDefault([]() { return; });
+        ON_CALL(*this, adminListNamespaces)
+            .WillByDefault(
+                [this](nvme_mi_ctrl_t ctrl,
+                       std::function<void(nvme_ex_ptr ex,
+                                          std::vector<uint32_t> ns)>&& cb) {
+            // return empty NS list
+            return fake->adminListNamespaces(ctrl, std::move(cb));
+        });
     }
 
     MOCK_METHOD(void, start, (const std::shared_ptr<MctpEndpoint>&),
@@ -671,6 +679,7 @@ TEST_F(NVMeTest, InitErrorInjection)
     EXPECT_CALL(
         mock,
         adminIdentify(_, Eq(nvme_identify_cns::NVME_IDENTIFY_CNS_NS), _, _, _))
+        .Times(AnyNumber()) // allow to run at 0 times based on given NS number
         .WillOnce([]<class... Args>(Args... args) -> void {
         auto&& cb = std::get<sizeof...(Args) - 1>(std::tie(args...));
         return cb(
@@ -693,7 +702,7 @@ TEST_F(NVMeTest, InitErrorInjection)
 
     // wait for subsystem initialization, each failure will introduce 1 second
     // delay for retry
-    timer.expires_after(subsys_poll_time * (2 + 6));
+    timer.expires_after(subsys_poll_time * (2 + 10));
     timer.async_wait([&](boost::system::error_code) {
         system_bus->async_method_call(
             [&, this](boost::system::error_code, const GetSubTreeType& result) {

@@ -487,7 +487,8 @@ class NVMeMiFake :
         [[maybe_unused]] std::function<
             void(nvme_ex_ptr ex, std::vector<uint32_t> ns)>&& cb) override
     {
-        /* TODO: return not support to the cb/s */
+        // return empty NS list
+        return cb({}, {});
     }
 
     void adminAttachDetachNamespace(

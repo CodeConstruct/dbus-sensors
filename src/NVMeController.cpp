@@ -657,7 +657,16 @@ void NVMeControllerEnabled::attachVolume(
     {
         if (auto s = subsys.lock())
         {
-            s->attachCtrlVolume(getCntrlId(), nsid);
+            try
+            {
+                s->attachCtrlVolume(getCntrlId(), nsid);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << e.what() << std::endl;
+                throw sdbusplus::xyz::openbmc_project::Common::Error::
+                    InternalFailure();
+            }
         }
         updateAssociation();
     }
@@ -710,7 +719,16 @@ void NVMeControllerEnabled::detachVolume(
     {
         if (auto s = subsys.lock())
         {
-            s->detachCtrlVolume(getCntrlId(), nsid);
+            try
+            {
+                s->detachCtrlVolume(getCntrlId(), nsid);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << e.what() << std::endl;
+                throw sdbusplus::xyz::openbmc_project::Common::Error::
+                    InternalFailure();
+            }
         }
         updateAssociation();
     }

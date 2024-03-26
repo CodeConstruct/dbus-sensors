@@ -42,11 +42,24 @@ class NVMeSubsystem :
      */
     std::string volumePath(uint32_t nsid) const;
 
+    /**
+     * @brief delete given namespace from the nvme device and nvme daemon,
+     * throws on error
+     */
     void deleteVolume(boost::asio::yield_context yield,
                       std::shared_ptr<NVMeVolume> volume);
 
     std::vector<uint32_t> attachedVolumes(uint16_t ctrlId) const;
+
+    /**
+     * @brief Attach the namespace to controller, throws std::runtime_error on
+     * failure
+     */
     void attachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
+    /**
+     * @brief Detach the namespace from controller, throws std::runtime_error on
+     * failure
+     */
     void detachCtrlVolume(uint16_t ctrlId, uint32_t nsid);
     void detachAllCtrlVolume(uint32_t nsid);
     std::shared_ptr<NVMeVolume>
@@ -114,7 +127,6 @@ class NVMeSubsystem :
     std::shared_ptr<boost::asio::steady_timer> ctempTimer;
     std::chrono::milliseconds pollingInterval = std::chrono::milliseconds(1000);
 
-    bool isPresent;
     /*
     Drive interface: xyz.openbmc_project.Inventory.Item.Drive
     */
@@ -147,8 +159,6 @@ class NVMeSubsystem :
 
     std::shared_ptr<sdbusplus::asio::dbus_interface> assocIntf;
 
-    std::shared_ptr<sdbusplus::asio::dbus_interface> presentIntf;
-
     void createAssociation();
     void updateAssociation();
     std::vector<Association> makeAssociation() const;
@@ -171,22 +181,24 @@ class NVMeSubsystem :
     void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
                               NVMeNSIdentify ns);
 
-    void addIdentifyNamespace(uint32_t nsid);
+    void addIdentifyNamespace(boost::asio::yield_context yield, uint32_t nsid);
 
-    void checkPresence();
-    void updatePresence(const std::error_code& ec, bool present);
+    // fill DBus object for Drive, throws on failure
+    void fillDrive(boost::asio::yield_context yield);
 
-    void fillDrive();
-    void updateVolumes();
+    // update all namespaces in the subsystem, throws on failure
+    void updateVolumes(boost::asio::yield_context yield);
 
     // removes state associated with the volume. Does not manipulate the drive.
+    // throws on error
     void forgetVolume(std::shared_ptr<NVMeVolume> volume);
 
     // adds state associated with the volume. Does not create a volume.
     // may throw if the volume exists.
     std::shared_ptr<NVMeVolume> addVolume(const NVMeNSIdentify& ns);
 
-    void querySupportedFormats();
+    // query the supported LBA formats from identify ns, throws on failure
+    void querySupportedFormats(boost::asio::yield_context yield);
 
     // a counter to skip health poll when NVMe subsystem becomes Unavailable
     unsigned unavailableCount = 0;

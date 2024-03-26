@@ -160,7 +160,7 @@ class NVMeControllerEnabled :
         Enabled = 1,  // the controller is ready to serve DBus calls
     };
 
-    Status status = Status::Enabled;
+    Status status = Status::Disabled;
 
     NVMeControllerEnabled(NVMeController&& nvmeController);
 
