@@ -644,8 +644,7 @@ void NVMeSubsystem::start()
             self->ctemp->updateValue(getTemperatureReading(status->Temp));
         };
 
-        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFetcher,
-                  dataProcessor);
+        pollCtemp(ctempTimer, pollingInterval, dataFetcher, dataProcessor);
     }
     else if (nvmeIntf.getProtocol() == NVMeIntf::Protocol::NVMeMI)
     {
@@ -747,8 +746,7 @@ void NVMeSubsystem::start()
             return;
         };
 
-        pollCtemp(ctempTimer, std::chrono::seconds(1), dataFetcher,
-                  dataProcessor);
+        pollCtemp(ctempTimer, pollingInterval, dataFetcher, dataProcessor);
     }
 }
 

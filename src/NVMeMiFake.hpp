@@ -23,14 +23,14 @@ class NVMeMiFake :
     public std::enable_shared_from_this<NVMeMiFake>
 {
   public:
-    NVMeMiFake(boost::asio::io_context& io) :
+    NVMeMiFake(boost::asio::io_context& io, std::chrono::milliseconds delay) :
         io(io), valid(true) /*, worker(workerIO.get_executor())*/
     {
         // start worker thread
         workerStop = false;
-        thread =
-            std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
-                         &cv = workerCv, &isNotified = workerIsNotified]() {
+        thread = std::thread([&io = workerIO, &stop = workerStop,
+                              &mtx = workerMtx, &cv = workerCv,
+                              &isNotified = workerIsNotified, delay]() {
             std::cerr << "NVMeMiFake worker thread started: " << io.stopped()
                       << std::endl;
             // With BOOST_ASIO_DISABLE_THREADS, boost::asio::executor_work_guard
@@ -42,7 +42,7 @@ class NVMeMiFake :
             while (1)
             {
                 // mimik the communication delay.
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(delay);
                 io.run();
                 io.restart();
                 std::cerr << "job done" << std::endl;

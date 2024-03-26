@@ -2,6 +2,7 @@
 #include "NVMeSubsys.hpp"
 
 #include <dlfcn.h>
+#include <valgrind/valgrind.h>
 
 #include <nlohmann/json.hpp>
 #include <sdbusplus/asio/connection.hpp>
@@ -18,8 +19,8 @@ class NVMeMiMock :
     public std::enable_shared_from_this<NVMeMiMock>
 {
   public:
-    NVMeMiMock(boost::asio::io_context& io) :
-        fake(std::move(std::make_shared<NVMeMiFake>(io)))
+    NVMeMiMock(boost::asio::io_context& io, std::chrono::milliseconds delay) :
+        fake(std::move(std::make_shared<NVMeMiFake>(io, delay)))
     {
         ON_CALL(*this, getNID).WillByDefault([]() { return 0; });
         ON_CALL(*this, getEID).WillByDefault([]() { return 0; });
@@ -180,7 +181,8 @@ class NVMeTest : public ::testing::Test
 {
   protected:
     NVMeTest() :
-        object_server(system_bus), nvme_intf(NVMeIntf::create<NVMeMiMock>(io)),
+        object_server(system_bus),
+        nvme_intf(NVMeIntf::create<NVMeMiMock>(io, subsys_poll_time / 10)),
         mock(*std::dynamic_pointer_cast<NVMeMiMock>(
                   std::get<std::shared_ptr<NVMeMiIntf>>(
                       nvme_intf.getInferface()))
@@ -190,6 +192,7 @@ class NVMeTest : public ::testing::Test
                                                SensorData{}, nvme_intf))
     {
         subsys->unavailableMaxCount = 1;
+        subsys->pollingInterval = subsys_poll_time;
     }
 
     static void SetUpTestSuite()
@@ -244,7 +247,14 @@ class NVMeTest : public ::testing::Test
     NVMeIntf nvme_intf;
     NVMeMiMock& mock;
     std::shared_ptr<NVMeSubsystem> subsys;
+
+    const static std::chrono::milliseconds subsys_poll_time;
 };
+
+const std::chrono::milliseconds NVMeTest::subsys_poll_time = []() {
+    return (RUNNING_ON_VALGRIND) ? std::chrono::milliseconds(1000)
+                                 : std::chrono::milliseconds(100);
+}();
 
 boost::asio::io_context NVMeTest::io;
 std::shared_ptr<sdbusplus::asio::connection> NVMeTest::system_bus;
@@ -263,7 +273,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(std::chrono::seconds(2));
+    timer.expires_after(subsys_poll_time * 2);
     timer.async_wait([&](boost::system::error_code) {
         system_bus->async_method_call(
             [&, this](boost::system::error_code, const GetSubTreeType& result) {
@@ -272,7 +282,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
             subsys->stop();
 
             // wait for storage controller destruction.
-            timer.expires_after(std::chrono::seconds(1));
+            timer.expires_after(subsys_poll_time * 1);
             timer.async_wait([&](boost::system::error_code) {
                 system_bus->async_method_call(
                     [&](boost::system::error_code,
@@ -284,7 +294,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                         << j.dump(2) << std::endl;
                     // restart the subsystem
                     subsys->start();
-                    timer.expires_after(std::chrono::seconds(2));
+                    timer.expires_after(subsys_poll_time * 2);
                     timer.async_wait([&](boost::system::error_code) {
                         system_bus->async_method_call(
                             [&](boost::system::error_code,
@@ -295,7 +305,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                             // subsys.reset();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(std::chrono::seconds(1));
+                            timer.expires_after(subsys_poll_time * 1);
                             timer.async_wait([&](boost::system::error_code) {
                                 system_bus->async_method_call(
                                     [&](boost::system::error_code,
@@ -355,7 +365,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(std::chrono::seconds(2));
+    timer.expires_after(subsys_poll_time * 2);
     timer.async_wait([&](boost::system::error_code) {
         system_bus->async_method_call(
             [&](boost::system::error_code, const GetSubTreeType& result) {
@@ -379,7 +389,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
             });
 
             // wait for storage controller destruction.
-            timer.expires_after(std::chrono::seconds(2));
+            timer.expires_after(subsys_poll_time * 2);
             timer.async_wait([&](boost::system::error_code) {
                 system_bus->async_method_call(
                     [&](boost::system::error_code,
@@ -399,7 +409,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
                     });
-                    timer.expires_after(std::chrono::seconds(2));
+                    timer.expires_after(subsys_poll_time * 2);
                     timer.async_wait([&](boost::system::error_code) {
                         system_bus->async_method_call(
                             [&](boost::system::error_code,
@@ -411,7 +421,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                             // subsys.reset();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(std::chrono::seconds(1));
+                            timer.expires_after(subsys_poll_time * 1);
                             timer.async_wait([&](boost::system::error_code) {
                                 system_bus->async_method_call(
                                     [&](boost::system::error_code,
@@ -472,7 +482,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(std::chrono::seconds(2));
+    timer.expires_after(subsys_poll_time * 2);
     timer.async_wait([&](boost::system::error_code) {
         system_bus->async_method_call(
             [&](boost::system::error_code, const GetSubTreeType& result) {
@@ -494,7 +504,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
             });
 
             // wait for storage controller destruction.
-            timer.expires_after(std::chrono::seconds(2));
+            timer.expires_after(subsys_poll_time * 2);
             timer.async_wait([&](boost::system::error_code) {
                 system_bus->async_method_call(
                     [&](boost::system::error_code,
@@ -514,7 +524,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
                     });
-                    timer.expires_after(std::chrono::seconds(2));
+                    timer.expires_after(subsys_poll_time * 2);
                     timer.async_wait([&](boost::system::error_code) {
                         system_bus->async_method_call(
                             [&](boost::system::error_code,
@@ -525,7 +535,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                             subsys->stop();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(std::chrono::seconds(1));
+                            timer.expires_after(subsys_poll_time * 1);
                             timer.async_wait([&](boost::system::error_code) {
                                 system_bus->async_method_call(
                                     [&](boost::system::error_code,
@@ -680,7 +690,7 @@ TEST_F(NVMeTest, InitErrorInjection)
 
     // wait for subsystem initialization, each failure will introduce 1 second
     // delay for retry
-    timer.expires_after(std::chrono::seconds(2 + 6));
+    timer.expires_after(subsys_poll_time * (2 + 6));
     timer.async_wait([&](boost::system::error_code) {
         system_bus->async_method_call(
             [&, this](boost::system::error_code, const GetSubTreeType& result) {
@@ -689,7 +699,7 @@ TEST_F(NVMeTest, InitErrorInjection)
             subsys->stop();
 
             // wait for storage controller destruction.
-            timer.expires_after(std::chrono::seconds(1));
+            timer.expires_after(subsys_poll_time * 1);
             timer.async_wait([&](boost::system::error_code) {
                 system_bus->async_method_call(
                     [&](boost::system::error_code,

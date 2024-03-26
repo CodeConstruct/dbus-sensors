@@ -112,6 +112,7 @@ class NVMeSubsystem :
     /* thermal sensor for the subsystem */
     std::shared_ptr<NVMeSensor> ctemp;
     std::shared_ptr<boost::asio::steady_timer> ctempTimer;
+    std::chrono::milliseconds pollingInterval = std::chrono::milliseconds(1000);
 
     bool isPresent;
     /*
