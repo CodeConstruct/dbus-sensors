@@ -162,7 +162,6 @@ static void
             }
 
             std::cout << "[" << ep->describe() << "]: Removed" << std::endl;
-            nvmeSubsys->stop();
             miIntf->stop();
             // Start polling for the return of the device
             timer->expires_from_now(std::chrono::seconds(5));
@@ -179,7 +178,6 @@ static void
         if (miIntf && nvmeSubsys)
         {
             miIntf->start(ep);
-            nvmeSubsys->start();
         }
     });
 }
@@ -341,9 +339,9 @@ static void handleConfigurations(
             auto [entry, _] = nvmeDevices.emplace(interfacePath,
                                                   std::move(find->second));
             auto nvmeDev = entry->second;
+            nvmeSubsys->start();
             if (nvmeDev.intf.getProtocol() != NVMeIntf::Protocol::NVMeMI)
             {
-                nvmeSubsys->start();
                 continue;
             }
 
