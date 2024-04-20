@@ -26,9 +26,12 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/steady_timer.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <regex>
 #include <system_error>
+#include <unordered_set>
 
 struct NVMeDevice
 {
@@ -50,6 +53,47 @@ static NVMEMap nvmeDevices;
 static std::map<int, std::weak_ptr<NVMeMiWorker>> workerMap{};
 
 std::unordered_map<std::string, void*> pluginLibMap = {};
+
+static std::unordered_set<int> bannedBuses;
+
+static void initBannedI2cBus()
+{
+    const std::string script = "/usr/bin/init-banned-i2c-bus.sh";
+    const std::string confPath = "/var/run/nvmed/banned-i2c-bus.conf";
+    if (!std::filesystem::exists(script))
+    {
+        std::cerr << "Script " << script << " doesn't exist" << std::endl;
+        return;
+    }
+
+    std::cerr << "Begin to execute " << script << std::endl;
+    int rc = std::system(script.c_str());
+    std::cerr << "Shell script rc = " << rc << std::endl;
+
+    if (!std::filesystem::exists(confPath))
+    {
+        std::cerr << "Warning: " << confPath << " doesn't exist." << std::endl;
+        // Be optimistic，assume no bus is banned
+        return;
+    }
+    std::ifstream file;
+    file.open(confPath);
+    if (!file.is_open())
+    {
+        std::cerr << "Error: cannot open " << confPath << std::endl;
+        // Be optimistic，assume no bus is banned
+        return;
+    }
+
+    bannedBuses.clear();
+    int i2cBus{0};
+    while (file >> i2cBus)
+    {
+        std::cerr << "Banned i2c bus: " << i2cBus << std::endl;
+        bannedBuses.insert(i2cBus);
+    }
+    file.close();
+}
 
 static std::optional<int>
     extractBusNumber(const std::string& path,
@@ -187,6 +231,9 @@ static void handleConfigurations(
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
     const ManagedObjectType& nvmeConfigurations)
 {
+    // Initialize banned i2c bus info on every configuration change
+    initBannedI2cBus();
+
     /* We perform two iterations for configurations here. The first iteration is
      * to set up NVMeIntf. The second iter is to setup NVMe subsystem.
      *
@@ -218,6 +265,12 @@ static void handleConfigurations(
 
         if (!(busNumber && sensorName))
         {
+            continue;
+        }
+
+        if (bannedBuses.contains(*busNumber))
+        {
+            std::cerr << "Skip banned i2c bus:" << *busNumber << std::endl;
             continue;
         }
 
