@@ -1741,8 +1741,7 @@ void NVMeMi::adminListNamespaces(
             {
                 start = ns.back() + 1;
             }
-            status = nvme_mi_admin_identify_allocated_ns_list(ctrl, start,
-                                                              &list);
+            status = nvme_mi_admin_identify_active_ns_list(ctrl, start, &list);
             nvme_errno = errno;
             if (status != 0)
             {
