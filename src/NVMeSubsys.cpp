@@ -190,7 +190,7 @@ void NVMeSubsystem::processSecondaryControllerList(
         }
         catch (const std::exception& e)
         {
-            std::cerr << std::format("[{}]failed starting the subsystem: {}",
+            std::cerr << std::format("[{}] failed starting the subsystem: {}",
                                      self->name, e.what())
                       << std::endl;
             self->status = Status::Aborting;
@@ -1009,7 +1009,7 @@ void NVMeSubsystem::updateVolumes(boost::asio::yield_context yield)
                         std::back_inserter(deletions));
 
     std::cerr << std::format(
-        "[{}]subsystem enum {} NS, {} will be added, {} will be deleted\n",
+        "[{}] subsystem enum {} NS, {} will be added, {} will be deleted\n",
         name, ns.size(), additions.size(), deletions.size());
 
     for (auto n : deletions)

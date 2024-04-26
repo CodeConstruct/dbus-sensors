@@ -83,6 +83,11 @@ class NVMeSubsystem :
 
     void init();
 
+    const std::string& getName() const
+    {
+        return name;
+    }
+
 #if defined NVME_UNIT_TEST
     // allow the test fixture change the settings for subsystem
     friend class NVMeTest;

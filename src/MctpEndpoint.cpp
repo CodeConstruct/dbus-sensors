@@ -127,10 +127,7 @@ SmbusMctpdDevice::SmbusMctpdDevice(
 
 std::string SmbusMctpdDevice::describe() const
 {
-    return std::string("bus: ")
-        .append(std::to_string(smbus))
-        .append(", address: ")
-        .append(std::to_string(smdev));
+    return std::format("bus: {:2}, address: {:#x}", smbus, smdev);
 }
 
 MctpdEndpoint::MctpdEndpoint(

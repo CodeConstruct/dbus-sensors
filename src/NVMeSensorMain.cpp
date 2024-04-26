@@ -187,11 +187,14 @@ static void
             }
         },
             // Available
-            [weakIntf](const std::shared_ptr<MctpEndpoint>& ep) {
+            [weakIntf, weakSubsys](const std::shared_ptr<MctpEndpoint>& ep) {
             if (auto miIntf = weakIntf.lock())
             {
-                std::cout << "[" << ep->describe() << "]: Available"
-                          << std::endl;
+                if (auto subsys = weakSubsys.lock())
+                {
+                    std::cout << subsys->getName() << " [" << ep->describe()
+                              << "]: Available" << std::endl;
+                }
                 miIntf->start(ep);
             }
         },
