@@ -132,6 +132,17 @@ class NVMeSubsystem :
     std::shared_ptr<boost::asio::steady_timer> ctempTimer;
     std::chrono::milliseconds pollingInterval = std::chrono::milliseconds(1000);
 
+    /* Begin of patch context
+     *
+     *
+     *
+     */
+    /*
+     *
+     *
+     * End of patch context
+     */
+
     /*
     Drive interface: xyz.openbmc_project.Inventory.Item.Drive
     */

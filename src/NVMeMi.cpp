@@ -937,7 +937,8 @@ void NVMeMi::adminGetLogPage(
             std::vector<uint8_t> data;
             std::function<void(void)> logHandler;
             int rc = 0;
-            switch (lid)
+            int logId = lid;
+            switch (logId)
             {
                 case NVME_LOG_LID_ERROR:
                 {
@@ -973,6 +974,16 @@ void NVMeMi::adminGetLogPage(
                     }
                 }
                 break;
+                    /* Begin of patch context
+                     *
+                     *
+                     *
+                     */
+                    /*
+                     *
+                     *
+                     * End of patch context
+                     */
                 case NVME_LOG_LID_FW_SLOT:
                 {
                     data.resize(sizeof(nvme_firmware_slot));

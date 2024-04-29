@@ -393,6 +393,17 @@ void NVMeSubsystem::markFunctional(bool toggle)
             }
             // self->createStorageAssociation();
 
+            /* Begin of patch context
+             *
+             *
+             *
+             */
+            /*
+             *
+             *
+             * End of patch context
+             */
+
             /*
             find primary controller and make association
             The controller is SR-IOV, meaning all controllers (within a
@@ -474,6 +485,17 @@ std::shared_ptr<NVMeControllerEnabled>
     return primaryController;
 }
 
+/* Begin of patch context
+ *
+ *
+ *
+ */
+/*
+ *
+ *
+ * End of patch context
+ */
+
 void NVMeSubsystem::start()
 {
     for (auto [_, lib] : pluginLibMap)
@@ -525,6 +547,17 @@ void NVMeSubsystem::start()
         const SensorBaseConfigMap& sensorConfig = sensorBase->second;
         powerState = getPowerState(sensorConfig);
     }
+
+    /* Begin of patch context
+     *
+     *
+     *
+     */
+    /*
+     *
+     *
+     * End of patch context
+     */
 
     ctemp = std::make_shared<NVMeSensor>(objServer, io, conn, *sensorName,
                                          std::move(sensorThresholds), path,
