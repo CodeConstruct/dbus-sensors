@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 set -x
 
 # set up busctl flag for user session
