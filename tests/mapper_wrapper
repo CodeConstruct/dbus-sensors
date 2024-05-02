@@ -1,0 +1,28 @@
+#!/usr/bin/bash
+
+set -euo pipefail
+set -x
+
+MAPPERX="$1"
+shift
+
+# Support the docker container environment. OpenBMC relies on libsystemd's
+# sd_bus APIs, where sd_bus_default() relies on detection of a systemd
+# user-slice to determine whether the session or system bus is used. However, in
+# the container we do not appear to run in a user-slice, hence sd_bus_default()
+# hooks us up to the system bus.
+export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"
+
+LD_LIBRARY_PATH="/usr/local/lib/x86_64-linux-gnu/:/usr/local/lib/" \
+    "$MAPPERX" \
+    --service-namespaces="com.google.gbmc com.intel xyz.openbmc_project org.openbmc" \
+    --interface-namespaces="org.freedesktop.DBus.ObjectManager com.google.gbmc com.intel xyz.openbmc_project org.openbmc" \
+    --service-blacklists= &
+MAPPERX_PID=$!
+
+trap 'kill "$MAPPERX_PID" ; wait' EXIT
+
+sleep 1
+busctl tree xyz.openbmc_project.ObjectMapper
+
+"$@"
