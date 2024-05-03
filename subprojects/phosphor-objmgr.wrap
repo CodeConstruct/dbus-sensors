@@ -1,0 +1,6 @@
+[wrap-git]
+url = https://github.com/openbmc/phosphor-objmgr.git
+revision = HEAD
+
+[provide]
+phosphor-objmgr = mapper_dep
