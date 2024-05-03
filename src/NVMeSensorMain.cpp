@@ -237,15 +237,6 @@ static void handleConfigurations(
     // Initialize banned i2c bus info on every configuration change
     initBannedI2cBus();
 
-    /* We perform two iterations for configurations here. The first iteration is
-     * to set up NVMeIntf. The second iter is to setup NVMe subsystem.
-     *
-     * The reason to seperate these two processes is NVMeIntf initialization of
-     * NVMeMI is via MCTPd, from which the mctp control msg should be relatively
-     * short and should not be delayed by NVMe-MI protocol msg from NVMe
-     * subsystem.
-     */
-    std::map<std::string, NVMeDevice> updatedDevices;
     for (const auto& [interfacePath, configData] : nvmeConfigurations)
     {
         // find base configuration
@@ -295,15 +286,18 @@ static void handleConfigurations(
                 NVMeIntf nvmeIntf = NVMeIntf::create<NVMeBasic>(io, *busNumber,
                                                                 *address);
 
-                NVMeDevice dev{{}, nvmeIntf, {}};
-                updatedDevices.emplace(interfacePath, std::move(dev));
+                auto nvmeSubsys = NVMeSubsystem::create(
+                    io, objectServer, dbusConnection, interfacePath,
+                    *sensorName, configData, nvmeIntf);
+                nvmeSubsys->start();
+                NVMeDevice dev{{}, nvmeIntf, nvmeSubsys};
+                nvmeDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
             {
                 std::cerr << "Failed to add nvme basic interface for "
                           << std::string(interfacePath) << ": " << ex.what()
                           << "\n";
-                continue;
             }
         }
         else if (*nvmeProtocol == "mi_i2c")
@@ -348,69 +342,26 @@ static void handleConfigurations(
                     dbusConnection, *busNumber, *address);
                 NVMeIntf nvmeIntf = NVMeIntf::create<NVMeMi>(
                     io, dbusConnection, mctpDev, worker, powerState);
+                auto nvmeSubsys = NVMeSubsystem::create(
+                    io, objectServer, dbusConnection, interfacePath,
+                    *sensorName, configData, nvmeIntf);
 
-                // Create a partial NVMeDevice entry in the temporary
-                // updatedDevices map
-                NVMeDevice dev{mctpDev, nvmeIntf, {}};
-                updatedDevices.emplace(interfacePath, std::move(dev));
+                NVMeDevice dev{mctpDev, nvmeIntf, nvmeSubsys};
+                nvmeDevices.emplace(interfacePath, std::move(dev));
+                nvmeSubsys->start();
+                auto timer = std::make_shared<boost::asio::steady_timer>(
+                    io, std::chrono::seconds(5));
+                setupMctpDevice(mctpDev,
+                                std::get<std::shared_ptr<NVMeMiIntf>>(
+                                    nvmeIntf.getInferface()),
+                                nvmeSubsys, timer);
             }
             catch (std::exception& ex)
             {
                 std::cerr << "Failed to add nvme mi interface for "
                           << std::string(interfacePath) << ": " << ex.what()
                           << "\n";
-                continue;
             }
-        }
-    }
-
-    for (const auto& [interfacePath, configData] : nvmeConfigurations)
-    {
-        // find base configuration
-        auto sensorBase =
-            configData.find(configInterfaceName(nvme::sensorType));
-        if (sensorBase == configData.end())
-        {
-            continue;
-        }
-
-        const SensorBaseConfigMap& sensorConfig = sensorBase->second;
-
-        std::optional<std::string> sensorName = extractName(interfacePath,
-                                                            sensorConfig);
-
-        auto find = updatedDevices.find(interfacePath);
-        if (find == updatedDevices.end())
-            continue;
-        try
-        {
-            auto nvmeSubsys = NVMeSubsystem::create(
-                io, objectServer, dbusConnection, interfacePath, *sensorName,
-                configData, find->second.intf);
-            // Complete the NVMeDevice entry with its subsystem and record it in
-            // the persistent nvmeDeviceMap
-            find->second.subsys = nvmeSubsys;
-            auto [entry, _] = nvmeDevices.emplace(interfacePath,
-                                                  std::move(find->second));
-            auto nvmeDev = entry->second;
-            nvmeSubsys->start();
-            if (nvmeDev.intf.getProtocol() != NVMeIntf::Protocol::NVMeMI)
-            {
-                continue;
-            }
-
-            auto miIntf = std::get<std::shared_ptr<NVMeMiIntf>>(
-                nvmeDev.intf.getInferface());
-            auto timer = std::make_shared<boost::asio::steady_timer>(
-                io, std::chrono::seconds(5));
-            setupMctpDevice(nvmeDev.dev, miIntf, nvmeSubsys, timer);
-        }
-        catch (std::exception& ex)
-        {
-            std::cerr << "Failed to add nvme subsystem for "
-                      << std::string(interfacePath) << ": " << ex.what()
-                      << "\n";
-            continue;
         }
     }
 }
