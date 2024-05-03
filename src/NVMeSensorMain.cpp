@@ -16,6 +16,7 @@
 
 #include "MctpEndpoint.hpp"
 #include "NVMeBasic.hpp"
+#include "NVMeDevice.hpp"
 #include "NVMeIntf.hpp"
 #include "NVMeMi.hpp"
 #include "NVMePlugin.hpp"
@@ -32,13 +33,6 @@
 #include <regex>
 #include <system_error>
 #include <unordered_set>
-
-struct NVMeDevice
-{
-    std::shared_ptr<MctpDevice> dev;
-    NVMeIntf intf;
-    std::shared_ptr<NVMeSubsystem> subsys;
-};
 
 // a map with key value of {path, NVMeSubsystem}
 using NVMEMap = std::map<std::string, NVMeDevice>;
@@ -149,86 +143,6 @@ static std::optional<std::string>
     return std::get<std::string>(findProtocol->second);
 }
 
-static void
-    setupMctpDevice(const std::shared_ptr<MctpDevice>& dev,
-                    const std::weak_ptr<NVMeMiIntf>& weakIntf,
-                    const std::weak_ptr<NVMeSubsystem>& weakSubsys,
-                    const std::shared_ptr<boost::asio::steady_timer>& timer)
-{
-    dev->setup([weakDev{std::weak_ptr(dev)}, weakIntf, weakSubsys,
-                timer](const std::error_code& ec,
-                       const std::shared_ptr<MctpEndpoint>& ep) {
-        if (ec)
-        {
-            auto dev = weakDev.lock();
-            if (!dev)
-            {
-                return;
-            }
-            // Setup failed, wait a bit and try again
-            timer->expires_from_now(std::chrono::seconds(5));
-            timer->async_wait([=](const boost::system::error_code& ec) {
-                if (!ec)
-                {
-                    setupMctpDevice(dev, weakIntf, weakSubsys, timer);
-                }
-            });
-            return;
-        }
-
-        ep->subscribe(
-            // Degraded
-            [weakIntf](const std::shared_ptr<MctpEndpoint>& ep) {
-            if (auto miIntf = weakIntf.lock())
-            {
-                std::cout << "[" << ep->describe() << "]: Degraded"
-                          << std::endl;
-                miIntf->stop();
-            }
-        },
-            // Available
-            [weakIntf, weakSubsys](const std::shared_ptr<MctpEndpoint>& ep) {
-            if (auto miIntf = weakIntf.lock())
-            {
-                if (auto subsys = weakSubsys.lock())
-                {
-                    std::cout << subsys->getName() << " [" << ep->describe()
-                              << "]: Available" << std::endl;
-                }
-                miIntf->start(ep);
-            }
-        },
-            // Removed
-            [=](const std::shared_ptr<MctpEndpoint>& ep) {
-            auto nvmeSubsys = weakSubsys.lock();
-            auto miIntf = weakIntf.lock();
-            auto dev = weakDev.lock();
-            if (!nvmeSubsys || !miIntf || !dev)
-            {
-                return;
-            }
-
-            std::cout << "[" << ep->describe() << "]: Removed" << std::endl;
-            miIntf->stop();
-            // Start polling for the return of the device
-            timer->expires_from_now(std::chrono::seconds(5));
-            timer->async_wait([=](const boost::system::error_code& ec) {
-                if (!ec)
-                {
-                    setupMctpDevice(dev, weakIntf, weakSubsys, timer);
-                }
-            });
-        });
-
-        auto miIntf = weakIntf.lock();
-        auto nvmeSubsys = weakSubsys.lock();
-        if (miIntf && nvmeSubsys)
-        {
-            miIntf->start(ep);
-        }
-    });
-}
-
 static void handleConfigurations(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objectServer,
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection,
@@ -290,7 +204,7 @@ static void handleConfigurations(
                     io, objectServer, dbusConnection, interfacePath,
                     *sensorName, configData, nvmeIntf);
                 nvmeSubsys->start();
-                NVMeDevice dev{{}, nvmeIntf, nvmeSubsys};
+                NVMeDevice dev{{}, std::move(nvmeIntf), nvmeSubsys};
                 nvmeDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
@@ -346,15 +260,13 @@ static void handleConfigurations(
                     io, objectServer, dbusConnection, interfacePath,
                     *sensorName, configData, nvmeIntf);
 
-                NVMeDevice dev{mctpDev, nvmeIntf, nvmeSubsys};
-                nvmeDevices.emplace(interfacePath, std::move(dev));
+                NVMeDevice dev{mctpDev, std::move(nvmeIntf), nvmeSubsys};
+                auto [entry, _] = nvmeDevices.emplace(interfacePath,
+                                                      std::move(dev));
                 nvmeSubsys->start();
                 auto timer = std::make_shared<boost::asio::steady_timer>(
                     io, std::chrono::seconds(5));
-                setupMctpDevice(mctpDev,
-                                std::get<std::shared_ptr<NVMeMiIntf>>(
-                                    nvmeIntf.getInferface()),
-                                nvmeSubsys, timer);
+                entry->second.start(timer);
             }
             catch (std::exception& ex)
             {
@@ -371,12 +283,9 @@ void createNVMeSubsystems(
     std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
 {
     // todo: it'd be better to only update the ones we care about
-    for (const auto& [_, nvmeDev] : nvmeDevices)
+    for (auto& [_, nvmeDev] : nvmeDevices)
     {
-        if (nvmeDev.subsys)
-        {
-            nvmeDev.subsys->stop();
-        }
+        nvmeDev.stop();
     }
     nvmeDevices.clear();
 
@@ -450,7 +359,7 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& devices)
         return;
     }
 
-    device->second.subsys->stop();
+    device->second.stop();
     devices.erase(device);
 }
 

@@ -196,6 +196,7 @@ if get_option('nvme').enabled()
         'MctpEndpoint.cpp',
         'NVMeBasic.cpp',
         'NVMeController.cpp',
+        'NVMeDevice.cpp',
         'NVMeDrive.cpp',
         'NVMeError.cpp',
         'NVMeMi.cpp',
