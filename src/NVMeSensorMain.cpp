@@ -349,8 +349,6 @@ static void handleConfigurations(
                 NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(
                     io, dbusConnection, mctpDev, worker, powerState);
 
-                auto nvme = std::get<std::shared_ptr<NVMeMiIntf>>(
-                    nvmeMi.getInferface());
                 // Create a partial NVMeDevice entry in the temporary
                 // updatedDevices map
                 NVMeDevice dev{mctpDev, nvmeMi, {}};
