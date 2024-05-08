@@ -292,10 +292,10 @@ static void handleConfigurations(
             }
             try
             {
-                NVMeIntf nvmeBasic = NVMeIntf::create<NVMeBasic>(io, *busNumber,
-                                                                 *address);
+                NVMeIntf nvmeIntf = NVMeIntf::create<NVMeBasic>(io, *busNumber,
+                                                                *address);
 
-                NVMeDevice dev{{}, nvmeBasic, {}};
+                NVMeDevice dev{{}, nvmeIntf, {}};
                 updatedDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
@@ -346,12 +346,12 @@ static void handleConfigurations(
             {
                 auto mctpDev = std::make_shared<SmbusMctpdDevice>(
                     dbusConnection, *busNumber, *address);
-                NVMeIntf nvmeMi = NVMeIntf::create<NVMeMi>(
+                NVMeIntf nvmeIntf = NVMeIntf::create<NVMeMi>(
                     io, dbusConnection, mctpDev, worker, powerState);
 
                 // Create a partial NVMeDevice entry in the temporary
                 // updatedDevices map
-                NVMeDevice dev{mctpDev, nvmeMi, {}};
+                NVMeDevice dev{mctpDev, nvmeIntf, {}};
                 updatedDevices.emplace(interfacePath, std::move(dev));
             }
             catch (std::exception& ex)
