@@ -194,18 +194,18 @@ endif
 if get_option('nvme').enabled()
     nvme_srcs = files(
         'MctpEndpoint.cpp',
-        'NVMeSensorMain.cpp',
-        'NVMeSensor.cpp',
         'NVMeBasic.cpp',
-        'NVMeSubsys.cpp',
-        'NVMeMi.cpp',
         'NVMeController.cpp',
-        'NVMeProgress.cpp',
-        'NVMeVolume.cpp',
         'NVMeDrive.cpp',
         'NVMeError.cpp',
-        'NVMeStorage.cpp',
+        'NVMeMi.cpp',
         'NVMePlugin.cpp',
+        'NVMeProgress.cpp',
+        'NVMeSensor.cpp',
+        'NVMeSensorMain.cpp',
+        'NVMeStorage.cpp',
+        'NVMeSubsys.cpp',
+        'NVMeVolume.cpp',
     )
 
     pdi_dep = phosphor_dbus_interfaces_dep
