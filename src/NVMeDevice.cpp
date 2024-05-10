@@ -60,8 +60,6 @@ void NVMeDevice::finalize(const std::error_code& ec,
             self->removed(ep);
         }
     });
-
-    std::get<std::shared_ptr<NVMeMiIntf>>(intf.getInferface())->start(ep);
 }
 
 void NVMeDevice::restart()
