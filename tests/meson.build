@@ -145,7 +145,6 @@ if get_option('nvme').enabled()
         test_nvme_recovery_bin,
         depends: [ mapper ],
         env:'LD_LIBRARY_PATH=/usr/local/lib',
-        should_fail: true,
     )
 endif
 

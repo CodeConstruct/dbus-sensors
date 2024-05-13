@@ -80,7 +80,8 @@ TEST(NVMeRecovery, optimisationFailure)
     SensorData sensorData{};
     auto subsys = NVMeSubsystem::create(io, objectServer, systemBus, "/foo",
                                         "bar", sensorData, intf);
-    auto nvmeDev = NVMeDevice::create(io, mctpDev, std::move(intf), subsys);
+    auto nvmeDev = NVMeDevice::create(io, mctpDev, std::move(intf), subsys,
+                                      std::chrono::seconds(2));
     nvmeDev->start();
     io.run_for(std::chrono::seconds(6));
     nvmeDev->stop();

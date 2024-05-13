@@ -18,12 +18,13 @@ class NVMeDevice : public std::enable_shared_from_this<NVMeDevice>
         return std::make_shared<NVMeDevice>(Private(), intf, subsys);
     }
 
-    static std::shared_ptr<NVMeDevice>
-        create(boost::asio::io_context& io,
-               const std::shared_ptr<MctpDevice>& dev, NVMeIntf intf,
-               const std::shared_ptr<NVMeSubsystem>& subsys)
+    static std::shared_ptr<NVMeDevice> create(
+        boost::asio::io_context& io, const std::shared_ptr<MctpDevice>& dev,
+        NVMeIntf intf, const std::shared_ptr<NVMeSubsystem>& subsys,
+        std::chrono::duration<long> gracePeriod = std::chrono::seconds(5))
     {
-        return std::make_shared<NVMeDevice>(Private(), io, dev, intf, subsys);
+        return std::make_shared<NVMeDevice>(Private(), io, dev, intf, subsys,
+                                            gracePeriod);
     }
 
     NVMeDevice(Private /*unused*/, NVMeIntf intf,
@@ -33,9 +34,10 @@ class NVMeDevice : public std::enable_shared_from_this<NVMeDevice>
     {}
     NVMeDevice(Private /*unused*/, boost::asio::io_context& io,
                const std::shared_ptr<MctpDevice>& dev, NVMeIntf intf,
-               const std::shared_ptr<NVMeSubsystem>& subsys) :
+               const std::shared_ptr<NVMeSubsystem>& subsys,
+               std::chrono::duration<long> gracePeriod) :
         dev(dev),
-        intf(intf), subsys(subsys), timer(io)
+        intf(intf), subsys(subsys), timer(io), gracePeriod{gracePeriod}
     {}
     ~NVMeDevice() = default;
     void start();
@@ -54,4 +56,6 @@ class NVMeDevice : public std::enable_shared_from_this<NVMeDevice>
     NVMeIntf intf;
     std::shared_ptr<NVMeSubsystem> subsys;
     std::optional<boost::asio::steady_timer> timer{};
+    std::optional<std::chrono::duration<long>> gracePeriod;
+    bool recovering{};
 };
