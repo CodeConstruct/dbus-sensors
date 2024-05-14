@@ -203,10 +203,14 @@ static void handleConfigurations(
                 auto nvmeSubsys = NVMeSubsystem::create(
                     io, objectServer, dbusConnection, interfacePath,
                     *sensorName, configData, nvmeIntf);
-                nvmeSubsys->start();
                 auto nvmeDev = NVMeDevice::create(std::move(nvmeIntf),
                                                   nvmeSubsys);
-                nvmeDevices.try_emplace(interfacePath, nvmeDev);
+                auto [entry, added] = nvmeDevices.try_emplace(interfacePath,
+                                                              nvmeDev);
+                if (added)
+                {
+                    entry->second->start();
+                }
             }
             catch (std::exception& ex)
             {
@@ -263,10 +267,12 @@ static void handleConfigurations(
 
                 auto nvmeDev = NVMeDevice::create(
                     io, mctpDev, std::move(nvmeIntf), nvmeSubsys);
-                auto [entry, _] = nvmeDevices.try_emplace(interfacePath,
-                                                          nvmeDev);
-                nvmeSubsys->start();
-                entry->second->start();
+                auto [entry, added] = nvmeDevices.try_emplace(interfacePath,
+                                                              nvmeDev);
+                if (added)
+                {
+                    entry->second->start();
+                }
             }
             catch (std::exception& ex)
             {

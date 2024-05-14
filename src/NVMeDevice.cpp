@@ -4,6 +4,8 @@
 
 void NVMeDevice::start()
 {
+    subsys->start();
+
     if (intf.getProtocol() == NVMeIntf::Protocol::NVMeMI)
     {
         setup();
