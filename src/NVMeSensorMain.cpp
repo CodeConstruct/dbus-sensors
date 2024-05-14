@@ -35,7 +35,7 @@
 #include <unordered_set>
 
 // a map with key value of {path, NVMeSubsystem}
-using NVMEMap = std::map<std::string, NVMeDevice>;
+using NVMEMap = std::map<std::string, std::shared_ptr<NVMeDevice>>;
 static NVMEMap nvmeDevices;
 
 // A map from root bus number to the Worker
@@ -204,8 +204,9 @@ static void handleConfigurations(
                     io, objectServer, dbusConnection, interfacePath,
                     *sensorName, configData, nvmeIntf);
                 nvmeSubsys->start();
-                NVMeDevice dev{{}, std::move(nvmeIntf), nvmeSubsys};
-                nvmeDevices.emplace(interfacePath, std::move(dev));
+                auto nvmeDev = NVMeDevice::create(std::move(nvmeIntf),
+                                                  nvmeSubsys);
+                nvmeDevices.try_emplace(interfacePath, nvmeDev);
             }
             catch (std::exception& ex)
             {
@@ -260,13 +261,12 @@ static void handleConfigurations(
                     io, objectServer, dbusConnection, interfacePath,
                     *sensorName, configData, nvmeIntf);
 
-                NVMeDevice dev{mctpDev, std::move(nvmeIntf), nvmeSubsys};
-                auto [entry, _] = nvmeDevices.emplace(interfacePath,
-                                                      std::move(dev));
+                auto nvmeDev = NVMeDevice::create(
+                    io, mctpDev, std::move(nvmeIntf), nvmeSubsys);
+                auto [entry, _] = nvmeDevices.try_emplace(interfacePath,
+                                                          nvmeDev);
                 nvmeSubsys->start();
-                auto timer = std::make_shared<boost::asio::steady_timer>(
-                    io, std::chrono::seconds(5));
-                entry->second.start(timer);
+                entry->second->start();
             }
             catch (std::exception& ex)
             {
@@ -285,7 +285,7 @@ void createNVMeSubsystems(
     // todo: it'd be better to only update the ones we care about
     for (auto& [_, nvmeDev] : nvmeDevices)
     {
-        nvmeDev.stop();
+        nvmeDev->stop();
     }
     nvmeDevices.clear();
 
@@ -359,7 +359,7 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& devices)
         return;
     }
 
-    device->second.stop();
+    device->second->stop();
     devices.erase(device);
 }
 
