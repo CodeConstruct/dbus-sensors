@@ -63,6 +63,10 @@ class MctpEndpoint
      * @brief Subscribe to events produced by an endpoint object across its
      *        lifecycle
      *
+     * @post The provided callbacks are registered for events, and at least one
+     *       callback will be invoked at least once (to guarantee visibility of
+     *       the endpoint state at the time of registration).
+     *
      * @param degraded The callback to execute when the MCTP layer indicates the
      *                 endpoint is unresponsive
      *
