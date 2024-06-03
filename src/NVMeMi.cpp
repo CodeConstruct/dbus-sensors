@@ -30,7 +30,7 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
                PowerState readState) :
     io(io),
     device(device), readState(readState), mctpStatus(Status::Reset), mtu(64),
-    nvmeEP(nullptr), restart(false), startLoopRunning(false), worker(worker)
+    nvmeEP(nullptr), restart(false), isOptimizing(false), worker(worker)
 {
     // set update the worker thread
     if (!nvmeRoot)
@@ -142,41 +142,26 @@ void NVMeMi::epOptimize()
         case Status::Terminating:
             throw std::logic_error("optimize called from Status::Terminating");
     }
-
-    startLoopRunning = true;
-    auto timer = std::make_shared<boost::asio::steady_timer>(
-        io, std::chrono::milliseconds(500));
-    timer->async_wait([this, timer](boost::system::error_code ec) {
+    isOptimizing = true;
+    miSetMCTPConfiguration(
+        [self{shared_from_this()}](const std::error_code& ec) {
         if (ec)
         {
-            startLoopRunning = false;
+            std::cerr << "[" << self->device->describe() << "]"
+                      << "Failed setting up MTU for the MCTP endpoint."
+                      << std::endl;
+            self->isOptimizing = false;
+            self->recover();
             return;
         }
-        unsigned timeout = nvme_mi_ep_get_timeout(nvmeEP);
-        nvme_mi_ep_set_timeout(nvmeEP, initCmdTimeoutMS);
-        miSetMCTPConfiguration(
-            [timeout, ep{endpoint},
-             self{shared_from_this()}](const std::error_code& ec) {
-            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
+        self->configureLocalRouteMtu([self](const std::error_code& ec) {
+            self->isOptimizing = false;
             if (ec)
             {
-                std::cerr << "[" << ep->describe() << "]"
-                          << "Failed setting up MTU for the MCTP endpoint."
-                          << std::endl;
-                self->startLoopRunning = false;
                 self->recover();
                 return;
             }
-            self->configureLocalRouteMtu([self](const std::error_code& ec) {
-                if (ec)
-                {
-                    self->startLoopRunning = false;
-                    self->recover();
-                    return;
-                }
-                self->startLoopRunning = false;
-                self->mctpStatus = Status::Connected;
-            });
+            self->mctpStatus = Status::Connected;
         });
     });
 }
@@ -219,7 +204,7 @@ void NVMeMi::start(const std::shared_ptr<MctpEndpoint>& ep)
         }
     }
 
-    if (mctpStatus == Status::Initiated && !startLoopRunning)
+    if (mctpStatus == Status::Initiated && !isOptimizing)
     {
         epOptimize();
     }
@@ -411,12 +396,16 @@ void NVMeMi::miConfigureRemoteMCTP(
     }
     try
     {
-        post([port, mtu, max_supported_freq, ep{endpoint},
-              self{shared_from_this()}, cb{std::move(cb)}]() mutable {
+        post([port, mtu, max_supported_freq, self{shared_from_this()},
+              cb{std::move(cb)}]() mutable {
+            unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+            nvme_mi_ep_set_timeout(self->nvmeEP, initCmdTimeoutMS);
             auto rc = nvme_mi_mi_config_set_mctp_mtu(self->nvmeEP, port, mtu);
+            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
+
             if (rc)
             {
-                std::cerr << "[" << ep->describe() << "]"
+                std::cerr << "[" << self->device->describe() << "]"
                           << " failed to set remote MCTP MTU for port :"
                           << unsigned(port) << std::endl;
                 self->io.post([cb{std::move(cb)}]() {
@@ -461,14 +450,17 @@ void NVMeMi::miSetMCTPConfiguration(
     }
     try
     {
-        post([cb{std::move(cb)}, ep{endpoint},
-              self{shared_from_this()}]() mutable {
+        post([cb{std::move(cb)}, self{shared_from_this()}]() mutable {
+            unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
+            nvme_mi_ep_set_timeout(self->nvmeEP, initCmdTimeoutMS);
             struct nvme_mi_read_nvm_ss_info ssInfo;
             auto rc = nvme_mi_mi_read_mi_data_subsys(self->nvmeEP, &ssInfo);
+            nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
             if (rc)
             {
-                std::cerr << "Failed reading subsystem info failing: "
-                          << std::strerror(errno) << std::endl;
+                std::cerr << "[" << self->device->describe() << "] "
+                          << "Failed reading subsystem info failing "
+                          << std::endl;
                 self->io.post([cb{std::move(cb)}]() {
                     cb(std::make_error_code(std::errc::bad_message));
                 });
@@ -483,7 +475,7 @@ void NVMeMi::miSetMCTPConfiguration(
                 if (rc)
                 {
                     /* PCIe port might not be ready right after AC/DC cycle. */
-                    std::cerr << "[" << ep->describe()
+                    std::cerr << "[" << self->device->describe()
                               << "] failed reading port info for port_id: "
                               << unsigned(port_id) << std::endl;
                 }
@@ -524,6 +516,15 @@ void NVMeMi::configureLocalRouteMtu(
     std::function<void(const std::error_code& ec)> retry =
         [this, cb{std::move(completed)},
          retries](const std::error_code& ec) mutable {
+        if (!endpoint)
+        {
+            std::cerr << "[" << device->describe() << "] "
+                      << "failed to set MCTP path MTU: Status::Terminating"
+                      << std::endl;
+            cb(ec);
+            return;
+        }
+
         if (!ec)
         {
             std::cout << "[" << endpoint->describe() << "] "

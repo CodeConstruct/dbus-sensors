@@ -176,7 +176,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
     nvme_mi_ep_t nvmeEP;
     // Handle a start() while in Status::Terminating on entry to Status::Reset.
     bool restart;
-    bool startLoopRunning;
+    bool isOptimizing;
 
     std::shared_ptr<NVMeMiWorker> worker;
     void post(std::function<void(void)>&& func);
