@@ -715,6 +715,9 @@ void NVMeSubsystem::start()
                     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(
                         self->nvmeIntf.getInferface());
                     intf->recover();
+                    // stop the subsystem
+                    self->markFunctional(false);
+                    self->markAvailable(false);
                 }
                 return;
             }
