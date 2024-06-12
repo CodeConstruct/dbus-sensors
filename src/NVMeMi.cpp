@@ -30,7 +30,7 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
                PowerState readState) :
     io(io),
     device(device), readState(readState), mctpStatus(Status::Reset), mtu(64),
-    nvmeEP(nullptr), restart(false), isOptimizing(false), worker(worker)
+    nvmeEP(nullptr), restart(false), worker(worker)
 {
     // set update the worker thread
     if (!nvmeRoot)
@@ -60,6 +60,14 @@ void NVMeMi::epReset()
         case Status::Reset:
             return;
         case Status::Initiated:
+            if (optimizeTimer)
+            {
+                std::cerr << "[" << endpoint->describe() << "]"
+                          << "Cancel the optimization Timer for the endpoint"
+                          << std::endl;
+                optimizeTimer->cancel();
+            }
+            [[fallthrough]];
         case Status::Connected:
             if (nvmeEP == nullptr)
             {
@@ -142,26 +150,33 @@ void NVMeMi::epOptimize()
         case Status::Terminating:
             throw std::logic_error("optimize called from Status::Terminating");
     }
-    isOptimizing = true;
-    miSetMCTPConfiguration(
-        [self{shared_from_this()}](const std::error_code& ec) {
+    optimizeTimer = std::make_shared<boost::asio::steady_timer>(
+        io, std::chrono::milliseconds(500));
+    optimizeTimer->async_wait([this](boost::system::error_code ec) {
         if (ec)
         {
-            std::cerr << "[" << self->device->describe() << "]"
-                      << "Failed setting up MTU for the MCTP endpoint."
-                      << std::endl;
-            self->isOptimizing = false;
-            self->recover();
+            std::cerr << "Endpoint optimize timer error " << ec << std::endl;
             return;
         }
-        self->configureLocalRouteMtu([self](const std::error_code& ec) {
-            self->isOptimizing = false;
+        miSetMCTPConfiguration(
+            [self{shared_from_this()}](const std::error_code& ec) {
+            self->optimizeTimer = nullptr;
             if (ec)
             {
+                std::cerr << "[" << self->device->describe() << "]"
+                          << "Failed setting up MTU for the MCTP endpoint."
+                          << std::endl;
                 self->recover();
                 return;
             }
-            self->mctpStatus = Status::Connected;
+            self->configureLocalRouteMtu([self](const std::error_code& ec) {
+                if (ec)
+                {
+                    self->recover();
+                    return;
+                }
+                self->mctpStatus = Status::Connected;
+            });
         });
     });
 }
@@ -204,7 +219,7 @@ void NVMeMi::start(const std::shared_ptr<MctpEndpoint>& ep)
         }
     }
 
-    if (mctpStatus == Status::Initiated && !isOptimizing)
+    if (mctpStatus == Status::Initiated)
     {
         epOptimize();
     }
