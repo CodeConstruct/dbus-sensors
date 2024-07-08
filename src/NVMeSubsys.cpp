@@ -1091,6 +1091,7 @@ void NVMeSubsystem::fillDrive(boost::asio::yield_context yield)
     nvme_id_ctrl& id = *reinterpret_cast<nvme_id_ctrl*>(data.data());
     drive->serialNumber(nvmeString(id.sn, sizeof(id.sn)));
     drive->model(nvmeString(id.mn, sizeof(id.mn)));
+    drive->capacity(char128ToUint64(id.tnvmcap));
 
     auto fwVer = nvmeString(id.fr, sizeof(id.fr));
     if (!fwVer.empty())

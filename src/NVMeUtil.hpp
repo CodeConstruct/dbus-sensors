@@ -224,3 +224,16 @@ static inline std::string nvmeString(const char* data, size_t size)
     }
     return s;
 }
+
+static inline uint64_t char128ToUint64(const unsigned char* data)
+{
+    int i;
+    uint64_t result = 0;
+
+    for (i = 0; i < 16; i++)
+    {
+        result *= 256;
+        result += data[15 - i];
+    }
+    return result;
+}
