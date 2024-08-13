@@ -49,11 +49,12 @@ Direction findThresholdDirection(const std::string& direct)
 bool parseThresholdsFromConfig(
     const SensorData& sensorData,
     std::vector<thresholds::Threshold>& thresholdVector,
-    const std::string* matchLabel, const int* sensorIndex)
+    const std::string* matchLabel, const int* sensorIndex,
+    const std::string& lookupInterfaceName)
 {
     for (const auto& [intf, cfg] : sensorData)
     {
-        if (intf.find("Thresholds") == std::string::npos)
+        if (intf.find(lookupInterfaceName) == std::string::npos)
         {
             continue;
         }

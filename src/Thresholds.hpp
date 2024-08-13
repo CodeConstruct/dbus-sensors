@@ -117,7 +117,8 @@ struct ThresholdTimer
 bool parseThresholdsFromConfig(
     const SensorData& sensorData,
     std::vector<thresholds::Threshold>& thresholdVector,
-    const std::string* matchLabel = nullptr, const int* sensorIndex = nullptr);
+    const std::string* matchLabel = nullptr, const int* sensorIndex = nullptr,
+    const std::string& lookupInterfaceName = "Thresholds");
 
 bool parseThresholdsFromAttr(
     std::vector<thresholds::Threshold>& thresholdVector,
