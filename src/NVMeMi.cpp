@@ -28,9 +28,8 @@ NVMeMi::NVMeMi(boost::asio::io_context& io,
                const std::shared_ptr<const MctpDevice>& device,
                const std::shared_ptr<NVMeMiWorker>& worker,
                PowerState readState) :
-    io(io),
-    device(device), readState(readState), mctpStatus(Status::Reset), mtu(64),
-    nvmeEP(nullptr), restart(false), worker(worker)
+    io(io), device(device), readState(readState), mctpStatus(Status::Reset),
+    mtu(64), nvmeEP(nullptr), restart(false), worker(worker)
 {
     // set update the worker thread
     if (!nvmeRoot)

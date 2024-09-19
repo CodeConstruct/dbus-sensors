@@ -19,8 +19,7 @@ RelPerf relativePerformanceFromRP(uint8_t rp)
 
 NVMeStorage::NVMeStorage(sdbusplus::asio::object_server& objServer,
                          sdbusplus::bus_t& bus, const char* path) :
-    StorageBase(bus, path),
-    objServer(objServer), path(path)
+    StorageBase(bus, path), objServer(objServer), path(path)
 {}
 
 NVMeStorage::~NVMeStorage()

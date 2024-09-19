@@ -465,9 +465,8 @@ NVMeController::NVMeController(
     std::shared_ptr<sdbusplus::asio::connection> conn, std::string path,
     std::shared_ptr<NVMeMiIntf> nvmeIntf, nvme_mi_ctrl_t ctrl,
     std::weak_ptr<NVMeSubsystem> subsys) :
-    isPrimary(true),
-    io(io), objServer(objServer), conn(conn), path(path), nvmeIntf(nvmeIntf),
-    nvmeCtrl(ctrl), subsys(subsys)
+    isPrimary(true), io(io), objServer(objServer), conn(conn), path(path),
+    nvmeIntf(nvmeIntf), nvmeCtrl(ctrl), subsys(subsys)
 {}
 
 NVMeController::~NVMeController()
@@ -647,8 +646,7 @@ void NVMeControllerEnabled::attachVolume(
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
         });
-    },
-            yield);
+    }, yield);
 
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "attachVolume");
@@ -709,8 +707,7 @@ void NVMeControllerEnabled::detachVolume(
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
         });
-    },
-            yield);
+    }, yield);
 
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "detachVolume");

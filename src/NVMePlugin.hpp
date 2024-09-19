@@ -32,8 +32,7 @@ class NVMeControllerPlugin
 
     // The controller plugin can only be created from NVMePlugin
     NVMeControllerPlugin(std::shared_ptr<NVMeController> cntl,
-                         const SensorData&) :
-        nvmeController(cntl)
+                         const SensorData&) : nvmeController(cntl)
     {}
 
     virtual ~NVMeControllerPlugin() {}
@@ -98,8 +97,7 @@ class NVMePlugin
 {
   public:
     NVMePlugin(std::shared_ptr<NVMeSubsystem> subsys,
-               const SensorData& /*config*/) :
-        subsystem(std::move(subsys)){};
+               const SensorData& /*config*/) : subsystem(std::move(subsys)) {};
 
     virtual ~NVMePlugin() {}
 

@@ -186,8 +186,7 @@ static ssize_t processBasicQueryStream(FileHandle& in, FileHandle& out)
 NVMeBasicIO::NVMeBasicIO(
     boost::asio::io_context& io,
     std::function<ssize_t(FileHandle& in, FileHandle& out)>&& procFunc) :
-    reqStream(io),
-    respStream(io)
+    reqStream(io), respStream(io)
 {
     std::array<int, 2> responsePipe{};
     std::array<int, 2> requestPipe{};
@@ -296,9 +295,8 @@ void NVMeBasic::getStatus(
 
         if (n > len + 1)
         {
-            std::cerr << "Query stream has become unsynchronised: "
-                      << "n: " << n << ", "
-                      << "len: " << len << "\n";
+            std::cerr << "Query stream has become unsynchronised: " << "n: "
+                      << n << ", " << "len: " << len << "\n";
             return static_cast<std::size_t>(0);
         }
 

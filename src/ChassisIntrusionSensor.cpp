@@ -303,8 +303,7 @@ void ChassisIntrusionSensor::start()
 }
 
 ChassisIntrusionSensor::ChassisIntrusionSensor(
-    sdbusplus::asio::object_server& objServer) :
-    mObjServer(objServer)
+    sdbusplus::asio::object_server& objServer) : mObjServer(objServer)
 {
     mIface = mObjServer.add_interface("/xyz/openbmc_project/Chassis/Intrusion",
                                       "xyz.openbmc_project.Chassis.Intrusion");
@@ -313,8 +312,7 @@ ChassisIntrusionSensor::ChassisIntrusionSensor(
 ChassisIntrusionPchSensor::ChassisIntrusionPchSensor(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
     int busId, int slaveAddr) :
-    ChassisIntrusionSensor(objServer),
-    mPollTimer(io)
+    ChassisIntrusionSensor(objServer), mPollTimer(io)
 {
     if (busId < 0 || slaveAddr <= 0)
     {
@@ -357,8 +355,7 @@ ChassisIntrusionPchSensor::ChassisIntrusionPchSensor(
 ChassisIntrusionGpioSensor::ChassisIntrusionGpioSensor(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
     bool gpioInverted) :
-    ChassisIntrusionSensor(objServer),
-    mGpioInverted(gpioInverted), mGpioFd(io)
+    ChassisIntrusionSensor(objServer), mGpioInverted(gpioInverted), mGpioFd(io)
 {
     mGpioLine = gpiod::find_line(mPinName);
     if (!mGpioLine)
@@ -382,8 +379,8 @@ ChassisIntrusionGpioSensor::ChassisIntrusionGpioSensor(
 ChassisIntrusionHwmonSensor::ChassisIntrusionHwmonSensor(
     boost::asio::io_context& io, sdbusplus::asio::object_server& objServer,
     std::string hwmonName) :
-    ChassisIntrusionSensor(objServer),
-    mHwmonName(std::move(hwmonName)), mPollTimer(io)
+    ChassisIntrusionSensor(objServer), mHwmonName(std::move(hwmonName)),
+    mPollTimer(io)
 {
     std::vector<fs::path> paths;
 

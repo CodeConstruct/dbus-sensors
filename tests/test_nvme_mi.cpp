@@ -352,8 +352,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-        },
-            "xyz.openbmc_project.ObjectMapper",
+        }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
             std::vector<std::string>{
@@ -469,8 +468,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-        },
-            "xyz.openbmc_project.ObjectMapper",
+        }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
             std::vector<std::string>{
@@ -583,8 +581,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-        },
-            "xyz.openbmc_project.ObjectMapper",
+        }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
             std::vector<std::string>{
@@ -730,8 +727,7 @@ TEST_F(NVMeTest, InitErrorInjection)
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
-        },
-            "xyz.openbmc_project.ObjectMapper",
+        }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
             "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
             std::vector<std::string>{

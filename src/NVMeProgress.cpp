@@ -41,9 +41,7 @@ void NVMeProgress::abort()
 
 NVMeCreateVolumeProgress::NVMeCreateVolumeProgress(
     std::shared_ptr<sdbusplus::asio::connection> conn,
-    const std::string& path) :
-    NVMeProgress(conn, path),
-    path(path), conn(conn)
+    const std::string& path) : NVMeProgress(conn, path), path(path), conn(conn)
 {}
 
 NVMeCreateVolumeProgress::~NVMeCreateVolumeProgress()

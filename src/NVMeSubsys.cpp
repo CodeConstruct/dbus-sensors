@@ -940,8 +940,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
             [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
             h(std::make_tuple(ex, data));
         });
-    },
-        yield);
+    }, yield);
 
     if (ex)
     {
@@ -977,8 +976,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
             [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
             h(std::make_tuple(ex, data));
         });
-    },
-        yield);
+    }, yield);
 
     if (ex)
     {
@@ -1020,8 +1018,7 @@ void NVMeSubsystem::updateVolumes(boost::asio::yield_context yield)
             ctrl, [h](nvme_ex_ptr ex, std::vector<uint32_t> ns) mutable {
             h(std::make_tuple(ex, ns));
         });
-    },
-        yield);
+    }, yield);
 
     if (ex)
     {
@@ -1079,8 +1076,7 @@ void NVMeSubsystem::fillDrive(boost::asio::yield_context yield)
             [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
             h(std::make_tuple(ex, data));
         });
-    },
-        yield);
+    }, yield);
 
     if (ex)
     {
@@ -1291,8 +1287,7 @@ void NVMeSubsystem::querySupportedFormats(boost::asio::yield_context yield)
             [h](nvme_ex_ptr ex, std::span<uint8_t> data) mutable {
             h(std::make_tuple(ex, data));
         });
-    },
-        yield);
+    }, yield);
 
     if (ex)
     {
@@ -1350,8 +1345,7 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
             [h](const std::error_code& err, int nvme_status) mutable {
             h(std::make_tuple(err, nvme_status));
         });
-    },
-            yield);
+    }, yield);
 
     // exception must be thrown outside of the async block
     checkLibNVMeError(err, nvme_status, "Delete");

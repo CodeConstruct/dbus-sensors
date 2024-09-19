@@ -23,8 +23,7 @@ static constexpr const char* mctpdEndpointControlInterface =
 MctpdDevice::MctpdDevice(
     const std::shared_ptr<sdbusplus::asio::connection>& connection,
     const std::string& interface, const std::vector<uint8_t>& physaddr) :
-    connection(connection),
-    interface(interface), physaddr(physaddr)
+    connection(connection), interface(interface), physaddr(physaddr)
 {}
 
 void MctpdDevice::onEndpointInterfacesRemoved(
@@ -134,8 +133,8 @@ MctpdEndpoint::MctpdEndpoint(
     const std::shared_ptr<MctpDevice>& device,
     const std::shared_ptr<sdbusplus::asio::connection>& connection,
     sdbusplus::message::object_path objpath, int network, uint8_t eid) :
-    device(device),
-    connection(connection), objpath(std::move(objpath)), mctp{network, eid}
+    device(device), connection(connection), objpath(std::move(objpath)),
+    mctp{network, eid}
 {}
 
 void MctpdEndpoint::onMctpEndpointChange(sdbusplus::message_t& msg)
@@ -294,8 +293,7 @@ void MctpdEndpoint::remove()
                           << "]" << std::endl;
                 return;
             }
-        },
-            mctpdBusName, objpath.str, mctpdEndpointControlInterface, "Remove");
+        }, mctpdBusName, objpath.str, mctpdEndpointControlInterface, "Remove");
     }
     catch (const sdbusplus::exception::SdBusError& err)
     {
@@ -320,8 +318,7 @@ void MctpdEndpoint::setMtu(
         connection->async_method_call(
             [cb{std::move(completed)}](const boost::system::error_code& bsec) {
             cb(static_cast<const std::error_code&>(bsec));
-        },
-            mctpdBusName, objpath.str, mctpdEndpointControlInterface, "SetMTU",
+        }, mctpdBusName, objpath.str, mctpdEndpointControlInterface, "SetMTU",
             mtu);
     }
     catch (const sdbusplus::exception::SdBusError& err)

@@ -11,16 +11,14 @@ NVMeSdBusPlusError::NVMeSdBusPlusError(std::string_view desc) : desc(desc)
 }
 
 NVMeSdBusPlusError::NVMeSdBusPlusError(
-    std::shared_ptr<sdbusplus::exception_t> specific) :
-    specific(specific)
+    std::shared_ptr<sdbusplus::exception_t> specific) : specific(specific)
 {
     init();
 }
 
 NVMeSdBusPlusError::NVMeSdBusPlusError(
     std::string_view desc, std::shared_ptr<sdbusplus::exception_t> specific) :
-    desc(desc),
-    specific(specific)
+    desc(desc), specific(specific)
 {
     init();
 }

@@ -145,10 +145,9 @@ PSUSubEvent::PSUSubEvent(
     std::shared_ptr<std::set<std::string>> asserts,
     std::shared_ptr<std::set<std::string>> combineEvent,
     std::shared_ptr<bool> state, const std::string& psuName, double pollRate) :
-    eventInterface(std::move(eventInterface)),
-    asserts(std::move(asserts)), combineEvent(std::move(combineEvent)),
-    assertState(std::move(state)), path(path), eventName(eventName),
-    readState(powerState), waitTimer(io),
+    eventInterface(std::move(eventInterface)), asserts(std::move(asserts)),
+    combineEvent(std::move(combineEvent)), assertState(std::move(state)),
+    path(path), eventName(eventName), readState(powerState), waitTimer(io),
 
     inputDev(io, path, boost::asio::random_access_file::read_only),
     psuName(psuName), groupEventName(groupEventName), systemBus(conn)

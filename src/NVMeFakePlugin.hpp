@@ -5,8 +5,7 @@ class FakePlugin : public NVMePlugin
 {
   public:
     FakePlugin(std::shared_ptr<NVMeSubsystem> subsys,
-               const SensorData& config) :
-        NVMePlugin(subsys, config)
+               const SensorData& config) : NVMePlugin(subsys, config)
     {
         try
         {
