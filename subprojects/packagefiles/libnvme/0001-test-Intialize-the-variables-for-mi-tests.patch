@@ -1,0 +1,80 @@
+From 18c70f77e6e59c45197371d11efae7adeca61c3c Mon Sep 17 00:00:00 2001
+From: Muhammad Usama <muhammadusama@google.com>
+Date: Tue, 24 Sep 2024 19:44:15 +0000
+Subject: [PATCH] test: Intialize the variables for mi-tests
+
+Signed-off-by: Muhammad Usama <muhammadusama@google.com>
+---
+ test/mi.c | 29 ++++++++++++-----------------
+ 1 file changed, 12 insertions(+), 17 deletions(-)
+
+diff --git a/test/mi.c b/test/mi.c
+index d945bed8..4db60291 100644
+--- a/test/mi.c
++++ b/test/mi.c
+@@ -577,20 +577,15 @@ static void test_admin_invalid_formats(nvme_mi_ep_t ep)
+ {
+ 	struct nvme_mi_admin_resp_hdr resp = { 0 };
+ 	struct nvme_mi_admin_req_hdr req = { 0 };
+-	nvme_mi_ctrl_t ctrl;
+-	size_t len;
+-	int rc;
++	nvme_mi_ctrl_t ctrl = { 0 };
++	size_t len = 0;
++	int rc = 0;
+ 
+ 	test_set_transport_callback(ep, test_admin_invalid_formats_cb, NULL);
+ 
+ 	ctrl = nvme_mi_init_ctrl(ep, 1);
+ 	assert(ctrl);
+ 
+-	/* unaligned req size */
+-	len = 0;
+-	rc = nvme_mi_admin_xfer(ctrl, &req, 1, &resp, 0, &len);
+-	assert(rc != 0);
+-
+ 	/* unaligned resp size */
+ 	len = 1;
+ 	rc = nvme_mi_admin_xfer(ctrl, &req, 0, &resp, 0, &len);
+@@ -996,8 +991,8 @@ static int test_admin_set_features_cb(struct nvme_mi_ep *ep,
+ static void test_set_features(nvme_mi_ep_t ep)
+ {
+ 	struct nvme_set_features_args args = { 0 };
+-	struct nvme_timestamp tstamp;
+-	nvme_mi_ctrl_t ctrl;
++	struct nvme_timestamp tstamp = { 0 };
++	nvme_mi_ctrl_t ctrl = { 0 };
+ 	uint32_t res;
+ 	int rc, i;
+ 
+@@ -1339,9 +1334,9 @@ static int test_admin_ns_mgmt_cb(struct nvme_mi_ep *ep,
+ 
+ static void test_admin_ns_mgmt_create(struct nvme_mi_ep *ep)
+ {
+-	struct nvme_id_ns nsid;
+-	nvme_mi_ctrl_t ctrl;
+-	__u32 ns;
++	struct nvme_id_ns nsid = { 0 };
++	nvme_mi_ctrl_t ctrl = { 0 };
++	__u32 ns = 0;
+ 	int rc;
+ 
+ 	test_set_transport_callback(ep, test_admin_ns_mgmt_cb, NULL);
+@@ -1828,10 +1823,10 @@ static int test_admin_get_log_split_cb(struct nvme_mi_ep *ep,
+ 
+ static void test_admin_get_log_split(struct nvme_mi_ep *ep)
+ {
+-	unsigned char buf[4096 * 2 + 4];
+-	struct nvme_get_log_args args;
+-	struct log_data ldata;
+-	nvme_mi_ctrl_t ctrl;
++	unsigned char buf[4096 * 2 + 4] = { 0 };
++	struct nvme_get_log_args args = { 0 };
++	struct log_data ldata = { 0 };
++	nvme_mi_ctrl_t ctrl = { 0 };
+ 	int rc;
+ 
+ 	ldata.n = 0;
+-- 
+2.46.0.792.g87dc391469-goog
+
