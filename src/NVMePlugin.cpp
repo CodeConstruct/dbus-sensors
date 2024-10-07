@@ -84,14 +84,14 @@ bool NVMeControllerPlugin::isPrimary() const
 }
 
 void NVMeControllerPlugin::adminXfer(
-    const nvme_mi_admin_req_hdr& admin_req, std::span<uint8_t> data,
-    unsigned int timeout_ms,
+    const nvme_mi_admin_req_hdr& adminReq, std::span<uint8_t> data,
+    unsigned int timeoutMs,
     std::function<void(const std::error_code& ec,
-                       const nvme_mi_admin_resp_hdr& admin_resp,
-                       std::span<uint8_t> resp_data)>&& cb)
+                       const nvme_mi_admin_resp_hdr& adminResp,
+                       std::span<uint8_t> respData)>&& cb)
 {
-    nvmeController->nvmeIntf->adminXfer(nvmeController->nvmeCtrl, admin_req,
-                                        data, timeout_ms, std::move(cb));
+    nvmeController->nvmeIntf->adminXfer(nvmeController->nvmeCtrl, adminReq,
+                                        data, timeoutMs, std::move(cb));
 }
 
 uint16_t NVMeControllerPlugin::getCntrlId() const

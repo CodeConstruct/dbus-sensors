@@ -45,17 +45,11 @@ void NVMeDrive::erase(EraseAction action)
         {
             return;
         }
-        else
-        {
-            throw *makeLibNVMeError(
-                "sanitize already in progress with different parameters",
-                std::make_shared<CommonErr::Unavailable>());
-        }
+        throw *makeLibNVMeError(
+            "sanitize already in progress with different parameters",
+            std::make_shared<CommonErr::Unavailable>());
     }
-    else
-    {
-        sanitizeParams = params;
-    }
+    sanitizeParams = params;
 
     // Clear properties
     erasePercentage(0.0);
@@ -154,7 +148,7 @@ void NVMeDrive::sanitizePoll()
 }
 
 NVMeSanitizeParams::NVMeSanitizeParams(EraseAction sanact) :
-    sanact(sanact), passes(1), pattern(0x0), patternInvert(0)
+    sanact(sanact), passes(1), pattern(0x0), patternInvert(false)
 {}
 
 enum nvme_sanitize_sanact NVMeSanitizeParams::nvmeAction() const
@@ -173,12 +167,12 @@ enum nvme_sanitize_sanact NVMeSanitizeParams::nvmeAction() const
 
 bool NVMeSanitizeParams::matchesDword10(uint32_t dword10) const
 {
-    uint32_t own_dword10 = 0;
+    uint32_t ownDword10 = 0;
 
     // reconstruct the dword10 sent by libnvme
-    own_dword10 |= (uint32_t)nvmeAction();
-    own_dword10 |= (((uint32_t)patternInvert) << 8);
-    own_dword10 |= (((uint32_t)passes & 0xf) << 4);
+    ownDword10 |= (uint32_t)nvmeAction();
+    ownDword10 |= (((uint32_t)patternInvert) << 8);
+    ownDword10 |= (((uint32_t)passes & 0xf) << 4);
 
-    return dword10 == own_dword10;
+    return dword10 == ownDword10;
 }

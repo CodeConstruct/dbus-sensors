@@ -82,8 +82,5 @@ std::string NVMeCreateVolumeProgress::volumePath() const
     {
         return success->volumePath();
     }
-    else
-    {
-        return "";
-    }
+    return "";
 }

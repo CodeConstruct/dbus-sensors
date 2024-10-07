@@ -74,7 +74,6 @@ class NVMeSubsystem :
 
     const std::string path;
 
-  public:
     NVMeSubsystem(boost::asio::io_context& io,
                   sdbusplus::asio::object_server& objServer,
                   std::shared_ptr<sdbusplus::asio::connection> conn,
@@ -151,7 +150,7 @@ class NVMeSubsystem :
     // map from cntrlid to a pair of {controller, controller_plugin}
     std::map<uint16_t, std::pair<std::shared_ptr<NVMeController>,
                                  std::shared_ptr<NVMeControllerPlugin>>>
-        controllers{};
+        controllers;
 
     /*
     map of nsid to volumes
@@ -194,7 +193,7 @@ class NVMeSubsystem :
                      size_t lbaFormat, bool metadataAtEnd) override;
 
     // callback when drive completes. not called in dbus method context.
-    void createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
+    void createVolumeFinished(std::string progId, nvme_ex_ptr ex,
                               NVMeNSIdentify ns);
 
     void addIdentifyNamespace(boost::asio::yield_context yield, uint32_t nsid);

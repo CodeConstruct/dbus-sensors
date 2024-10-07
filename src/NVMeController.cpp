@@ -72,10 +72,9 @@ void NVMeControllerEnabled::init()
     securityInterface = objServer.add_interface(
         path, "xyz.openbmc_project.Inventory.Item.StorageControllerSecurity");
     securityInterface->register_method(
-        "SecuritySend",
-        [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
-                                     uint8_t proto, uint16_t proto_specific,
-                                     std::vector<uint8_t> data) {
+        "SecuritySend", [selfWeak{weak_from_this()}](
+                            boost::asio::yield_context yield, uint8_t proto,
+                            uint16_t protoSpecific, std::vector<uint8_t> data) {
         auto self = selfWeak.lock();
         if (!self)
         {
@@ -90,13 +89,13 @@ void NVMeControllerEnabled::init()
             throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
         }
 
-        return self->securitySendMethod(yield, proto, proto_specific, data);
+        return self->securitySendMethod(yield, proto, protoSpecific, data);
     });
     securityInterface->register_method(
         "SecurityReceive",
         [selfWeak{weak_from_this()}](boost::asio::yield_context yield,
-                                     uint8_t proto, uint16_t proto_specific,
-                                     uint32_t transfer_length) {
+                                     uint8_t proto, uint16_t protoSpecific,
+                                     uint32_t transferLength) {
         auto self = selfWeak.lock();
         if (!self)
         {
@@ -111,8 +110,8 @@ void NVMeControllerEnabled::init()
             throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
         }
 
-        return self->securityReceiveMethod(yield, proto, proto_specific,
-                                           transfer_length);
+        return self->securityReceiveMethod(yield, proto, protoSpecific,
+                                           transferLength);
     });
 
     // StorageController interface is implemented manually to allow
@@ -500,7 +499,7 @@ void NVMeController::setSecAssoc(
 
 void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
                                                uint8_t proto,
-                                               uint16_t proto_specific,
+                                               uint16_t protoSpecific,
                                                std::span<uint8_t> data)
 {
     if (status != Status::Enabled)
@@ -510,27 +509,27 @@ void NVMeControllerEnabled::securitySendMethod(boost::asio::yield_context yield,
     }
 
     using callback_t = void(std::tuple<std::error_code, int>);
-    auto [err, nvme_status] =
+    auto [err, nvmeStatus] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
-            [intf{nvmeIntf}, ctrl{nvmeCtrl}, proto, proto_specific,
+            [intf{nvmeIntf}, ctrl{nvmeCtrl}, proto, protoSpecific,
              &data](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
         intf->adminSecuritySend(
-            ctrl, proto, proto_specific, data,
-            [h](const std::error_code& err, int nvme_status) mutable {
-            h(std::make_tuple(err, nvme_status));
+            ctrl, proto, protoSpecific, data,
+            [h](const std::error_code& err, int nvmeStatus) mutable {
+            h(std::make_tuple(err, nvmeStatus));
         });
     },
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "SecuritySend");
+    checkLibNVMeError(err, nvmeStatus, "SecuritySend");
 }
 
 std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
-    boost::asio::yield_context yield, uint8_t proto, uint16_t proto_specific,
-    uint32_t transfer_length)
+    boost::asio::yield_context yield, uint8_t proto, uint16_t protoSpecific,
+    uint32_t transferLength)
 {
     if (status != Status::Enabled)
     {
@@ -540,24 +539,24 @@ std::vector<uint8_t> NVMeControllerEnabled::securityReceiveMethod(
 
     using callback_t =
         void(std::tuple<std::error_code, int, std::vector<uint8_t>>);
-    auto [err, nvme_status, data] =
+    auto [err, nvmeStatus, data] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
-            [intf{nvmeIntf}, ctrl{nvmeCtrl}, proto, proto_specific,
-             transfer_length](auto&& handler) {
+            [intf{nvmeIntf}, ctrl{nvmeCtrl}, proto, protoSpecific,
+             transferLength](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
-        intf->adminSecurityReceive(ctrl, proto, proto_specific, transfer_length,
+        intf->adminSecurityReceive(ctrl, proto, protoSpecific, transferLength,
                                    [h](const std::error_code& err,
-                                       int nvme_status,
+                                       int nvmeStatus,
                                        std::span<uint8_t> data) mutable {
             std::vector<uint8_t> d(data.begin(), data.end());
-            h(std::make_tuple(err, nvme_status, d));
+            h(std::make_tuple(err, nvmeStatus, d));
         });
     },
             yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "SecurityReceive");
+    checkLibNVMeError(err, nvmeStatus, "SecurityReceive");
     return data;
 }
 
@@ -568,7 +567,7 @@ std::tuple<uint32_t, uint32_t, uint32_t>
         uint32_t cdw12, uint32_t cdw13, uint32_t cdw14, uint32_t cdw15)
 {
     using callback_t = void(std::tuple<std::error_code, int, uint32_t>);
-    auto [err, nvme_status, completion_dw0] =
+    auto [err, nvmeStatus, completionDw0] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
             [intf{nvmeIntf}, ctrl{nvmeCtrl}, opcode, cdw1, cdw2, cdw3, cdw10,
              cdw11, cdw12, cdw13, cdw14, cdw15](auto&& handler) {
@@ -576,37 +575,37 @@ std::tuple<uint32_t, uint32_t, uint32_t>
 
         intf->adminNonDataCmd(ctrl, opcode, cdw1, cdw2, cdw3, cdw10, cdw11,
                               cdw12, cdw13, cdw14, cdw15,
-                              [h](const std::error_code& err, int nvme_status,
-                                  uint32_t completion_dw0) mutable {
-            h(std::make_tuple(err, nvme_status, completion_dw0));
+                              [h](const std::error_code& err, int nvmeStatus,
+                                  uint32_t completionDw0) mutable {
+            h(std::make_tuple(err, nvmeStatus, completionDw0));
         });
     },
             yield);
 
-    std::cerr << "nvme_status:" << nvme_status << ", dw0:" << completion_dw0
+    std::cerr << "nvme_status:" << nvmeStatus << ", dw0:" << completionDw0
               << std::endl;
-    if (nvme_status < 0)
+    if (nvmeStatus < 0)
     {
         throw sdbusplus::exception::SdBusError(err.value(),
                                                "adminNonDataCmdMethod");
     }
 
     // Parse MI status Or MI status from nvme_status
-    uint32_t mi_status = 0;
-    uint32_t admin_status = 0;
-    if (nvme_status_get_type(nvme_status) == NVME_STATUS_TYPE_MI)
+    uint32_t miStatus = 0;
+    uint32_t adminStatus = 0;
+    if (nvme_status_get_type(nvmeStatus) == NVME_STATUS_TYPE_MI)
     {
         // there is no Admin status and dw0 if MI layer failed.
-        mi_status = nvme_status_get_value(nvme_status);
-        admin_status = 0;
-        completion_dw0 = 0;
+        miStatus = nvme_status_get_value(nvmeStatus);
+        adminStatus = 0;
+        completionDw0 = 0;
     }
     else
     {
-        mi_status = 0;
-        admin_status = nvme_status_get_value(nvme_status);
+        miStatus = 0;
+        adminStatus = nvme_status_get_value(nvmeStatus);
     }
-    return {mi_status, admin_status, completion_dw0};
+    return {miStatus, adminStatus, completionDw0};
 }
 
 void NVMeControllerEnabled::attachVolume(
@@ -636,20 +635,20 @@ void NVMeControllerEnabled::attachVolume(
 
     using callback_t = void(std::tuple<std::error_code, int>);
     uint16_t ctrlid = getCntrlId();
-    auto [err, nvme_status] =
+    auto [err, nvmeStatus] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
             [intf{nvmeIntf}, ctrl{nvmeCtrl}, ctrlid, nsid](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
         intf->adminAttachDetachNamespace(
             ctrl, ctrlid, nsid, true,
-            [h](const std::error_code& err, int nvme_status) mutable {
-            h(std::make_tuple(err, nvme_status));
+            [h](const std::error_code& err, int nvmeStatus) mutable {
+            h(std::make_tuple(err, nvmeStatus));
         });
     }, yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "attachVolume");
+    checkLibNVMeError(err, nvmeStatus, "attachVolume");
 
     if (status == Status::Enabled)
     {
@@ -697,20 +696,20 @@ void NVMeControllerEnabled::detachVolume(
 
     using callback_t = void(std::tuple<std::error_code, int>);
     uint16_t ctrlid = getCntrlId();
-    auto [err, nvme_status] =
+    auto [err, nvmeStatus] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
             [intf{nvmeIntf}, ctrl{nvmeCtrl}, ctrlid, nsid](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
         intf->adminAttachDetachNamespace(
             ctrl, ctrlid, nsid, false,
-            [h](const std::error_code& err, int nvme_status) mutable {
-            h(std::make_tuple(err, nvme_status));
+            [h](const std::error_code& err, int nvmeStatus) mutable {
+            h(std::make_tuple(err, nvmeStatus));
         });
     }, yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "detachVolume");
+    checkLibNVMeError(err, nvmeStatus, "detachVolume");
 
     if (status == Status::Enabled)
     {

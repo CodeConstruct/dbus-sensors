@@ -60,7 +60,7 @@ class NVMeIntf
         {
             return Protocol::NVMeBasic;
         }
-        else if (std::holds_alternative<std::shared_ptr<NVMeMiIntf>>(interface))
+        if (std::holds_alternative<std::shared_ptr<NVMeMiIntf>>(interface))
         {
             return Protocol::NVMeMI;
         }
@@ -197,33 +197,32 @@ class NVMeMiIntf
             cb) = 0;
 
     virtual void adminSecuritySend(
-        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
+        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t protoSpecific,
         std::span<uint8_t> data,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb) = 0;
 
     virtual void adminSecurityReceive(
-        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
-        uint32_t transfer_length,
-        std::function<void(const std::error_code&, int nvme_status,
+        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t protoSpecific,
+        uint32_t transferLength,
+        std::function<void(const std::error_code&, int nvmeStatus,
                            const std::span<uint8_t> data)>&& cb) = 0;
 
     virtual void adminNonDataCmd(
         nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
         uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
         uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
-        std::function<void(const std::error_code&, int nvme_status,
-                           uint32_t comption_dw0)>&& cb) = 0;
+        std::function<void(const std::error_code&, int nvmeStatus,
+                           uint32_t comptionDw0)>&& cb) = 0;
 
     virtual void createNamespace(
-        nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
-        bool metadata_at_end,
-        std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+        nvme_mi_ctrl_t ctrl, uint64_t size, size_t lbaFormat,
+        bool metadataAtEnd, std::function<void(nvme_ex_ptr ex)>&& submittedCb,
         std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&&
-            finished_cb) = 0;
+            finishedCb) = 0;
 
     virtual void adminDeleteNamespace(
         nvme_mi_ctrl_t ctrl, uint32_t nsid,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb) = 0;
 
     /**
      * listNamespaces() - return list of NSIDs
@@ -238,11 +237,11 @@ class NVMeMiIntf
 
     virtual void adminAttachDetachNamespace(
         nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb) = 0;
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb) = 0;
 
     virtual void adminSanitize(nvme_mi_ctrl_t ctrl,
                                enum nvme_sanitize_sanact sanact, uint8_t passes,
-                               uint32_t pattern, bool invert_pattern,
+                               uint32_t pattern, bool invertPattern,
                                std::function<void(nvme_ex_ptr ex)>&& cb) = 0;
 
     /**
@@ -275,11 +274,11 @@ class NVMeMiIntf
      * @ec will be returned on failure.
      */
     virtual void
-        adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
-                  std::span<uint8_t> data, unsigned int timeout_ms,
+        adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& adminReq,
+                  std::span<uint8_t> data, unsigned int timeoutMs,
                   std::function<void(const std::error_code& ec,
-                                     const nvme_mi_admin_resp_hdr& admin_resp,
-                                     std::span<uint8_t> resp_data)>&& cb) = 0;
+                                     const nvme_mi_admin_resp_hdr& adminResp,
+                                     std::span<uint8_t> respData)>&& cb) = 0;
 };
 
 /* A subset of Namespace Identify details of interest */

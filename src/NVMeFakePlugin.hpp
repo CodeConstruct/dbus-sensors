@@ -18,5 +18,5 @@ class FakePlugin : public NVMePlugin
   private:
     std::shared_ptr<NVMeControllerPlugin>
         makeController(std::shared_ptr<NVMeController> cntl,
-                       const SensorData&) override;
+                       const SensorData& cfg) override;
 };

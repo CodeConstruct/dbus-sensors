@@ -53,7 +53,7 @@ void NVMeStorage::init(std::shared_ptr<NVMeStorage> self)
 void NVMeStorage::setSupportedFormats(const std::vector<LBAFormat>& formats)
 {
     std::vector<std::tuple<size_t, size_t, size_t, RelPerf>> prop;
-    for (auto& f : formats)
+    for (const auto& f : formats)
     {
         prop.push_back(
             {f.index, f.blockSize, f.metadataSize, f.relativePerformance});

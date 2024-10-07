@@ -32,7 +32,8 @@ class NVMeControllerPlugin
 
     // The controller plugin can only be created from NVMePlugin
     NVMeControllerPlugin(std::shared_ptr<NVMeController> cntl,
-                         const SensorData&) : nvmeController(cntl)
+                         [[maybe_unused]] const SensorData& cfg) :
+        nvmeController(cntl)
     {}
 
     virtual ~NVMeControllerPlugin() {}
@@ -77,11 +78,11 @@ class NVMeControllerPlugin
      *
      * @ec will be returned on failure.
      */
-    void adminXfer(const nvme_mi_admin_req_hdr& admin_req,
-                   std::span<uint8_t> data, unsigned int timeout_ms,
+    void adminXfer(const nvme_mi_admin_req_hdr& adminReq,
+                   std::span<uint8_t> data, unsigned int timeoutMs,
                    std::function<void(const std::error_code& ec,
-                                      const nvme_mi_admin_resp_hdr& admin_resp,
-                                      std::span<uint8_t> resp_data)>&& cb);
+                                      const nvme_mi_admin_resp_hdr& adminResp,
+                                      std::span<uint8_t> respData)>&& cb);
     /**
      * @brief Get cntrl_id for the binded NVMe controller
      *
@@ -107,19 +108,12 @@ class NVMePlugin
 
     // the NVMe subsystem will start the plugin after NVMesubsystem finished
     // intialization and started.
-    virtual void start()
-    {
-        return;
-    }
+    virtual void start() {}
 
     // the NVMe subsystem will stop the plugin before NVMe subsystem stop
     // itself.
-    virtual void stop()
-    {
-        return;
-    }
+    virtual void stop() {}
 
-  public:
     static constexpr const char* libraryPath = "/usr/lib/nvmed/";
 
   protected:

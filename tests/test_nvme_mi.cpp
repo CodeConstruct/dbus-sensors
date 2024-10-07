@@ -68,12 +68,12 @@ class NVMeMiMock :
         ON_CALL(*this, adminXfer)
             .WillByDefault(
                 [this](
-                    nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
-                    std::span<uint8_t> data, unsigned int timeout_ms,
+                    nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& adminReq,
+                    std::span<uint8_t> data, unsigned int timeoutMs,
                     std::function<void(const std::error_code& ec,
-                                       const nvme_mi_admin_resp_hdr& admin_resp,
-                                       std::span<uint8_t> resp_data)>&& cb) {
-            return fake->adminXfer(ctrl, admin_req, data, timeout_ms,
+                                       const nvme_mi_admin_resp_hdr& adminResp,
+                                       std::span<uint8_t> respData)>&& cb) {
+            return fake->adminXfer(ctrl, adminReq, data, timeoutMs,
                                    std::move(cb));
         });
         ON_CALL(*this, adminSecuritySend).WillByDefault([]() { return; });
@@ -120,11 +120,11 @@ class NVMeMiMock :
          std::function<void(const std::error_code&, nvme_status_field)>&& cb),
         (override));
     MOCK_METHOD(void, adminXfer,
-                (nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
-                 std::span<uint8_t> data, unsigned int timeout_ms,
+                (nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& adminReq,
+                 std::span<uint8_t> data, unsigned int timeoutMs,
                  std::function<void(const std::error_code& ec,
-                                    const nvme_mi_admin_resp_hdr& admin_resp,
-                                    std::span<uint8_t> resp_data)>&& cb),
+                                    const nvme_mi_admin_resp_hdr& adminResp,
+                                    std::span<uint8_t> respData)>&& cb),
                 (override));
 
     MOCK_METHOD(
@@ -192,25 +192,22 @@ class NVMeTest : public ::testing::Test
 {
   protected:
     NVMeTest() :
-        object_server(system_bus),
-        nvme_intf(NVMeIntf::create<NVMeMiMock>(io, subsys_poll_time / 10)),
+        object_server(systemBus),
+        nvme_intf(NVMeIntf::create<NVMeMiMock>(io, subsysPollTime / 10)),
         mock(*std::dynamic_pointer_cast<NVMeMiMock>(
-                  std::get<std::shared_ptr<NVMeMiIntf>>(
-                      nvme_intf.getInferface()))
-                  .get()),
-        subsys(std::make_shared<NVMeSubsystem>(io, object_server, system_bus,
-                                               subsys_path, "NVMe_1",
+            std::get<std::shared_ptr<NVMeMiIntf>>(nvme_intf.getInferface()))),
+        subsys(std::make_shared<NVMeSubsystem>(io, object_server, systemBus,
+                                               subsysPath, "NVMe_1",
                                                SensorData{}, nvme_intf))
     {
         subsys->unavailableMaxCount = 1;
-        subsys->pollingInterval = subsys_poll_time;
+        subsys->pollingInterval = subsysPollTime;
     }
 
     static void SetUpTestSuite()
     {
-        system_bus =
-            std::make_shared<sdbusplus::asio::connection>(NVMeTest::io);
-        system_bus->request_name("xyz.openbmc_project.NVMeTest");
+        systemBus = std::make_shared<sdbusplus::asio::connection>(NVMeTest::io);
+        systemBus->request_name("xyz.openbmc_project.NVMeTest");
 
         // Load plugin shared libraries
         try
@@ -248,27 +245,27 @@ class NVMeTest : public ::testing::Test
         io.restart();
     }
 
-    static constexpr char subsys_path[] =
+    static constexpr char subsysPath[] =
         "/xyz/openbmc_project/inventory/Test_Chassis/Test_NVMe";
 
     static boost::asio::io_context io;
-    static std::shared_ptr<sdbusplus::asio::connection> system_bus;
+    static std::shared_ptr<sdbusplus::asio::connection> systemBus;
     sdbusplus::asio::object_server object_server;
 
     NVMeIntf nvme_intf;
     NVMeMiMock& mock;
     std::shared_ptr<NVMeSubsystem> subsys;
 
-    const static std::chrono::milliseconds subsys_poll_time;
+    const static std::chrono::milliseconds subsysPollTime;
 };
 
-const std::chrono::milliseconds NVMeTest::subsys_poll_time = []() {
-    return (RUNNING_ON_VALGRIND) ? std::chrono::milliseconds(1000)
-                                 : std::chrono::milliseconds(100);
+const std::chrono::milliseconds NVMeTest::subsysPollTime = []() {
+    return (RUNNING_ON_VALGRIND != 0U) ? std::chrono::milliseconds(1000)
+                                       : std::chrono::milliseconds(100);
 }();
 
 boost::asio::io_context NVMeTest::io;
-std::shared_ptr<sdbusplus::asio::connection> NVMeTest::system_bus;
+std::shared_ptr<sdbusplus::asio::connection> NVMeTest::systemBus;
 
 /**
  * @brief Test start and stop function of NVMeSubsystem
@@ -284,18 +281,18 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(subsys_poll_time * 2);
+    timer.expires_after(subsysPollTime * 2);
     timer.async_wait([&](boost::system::error_code) {
-        system_bus->async_method_call(
+        systemBus->async_method_call(
             [&, this](boost::system::error_code, const GetSubTreeType& result) {
             // Only PF and the enabled VF should be listed
             EXPECT_EQ(result.size(), 2);
             subsys->stop();
 
             // wait for storage controller destruction.
-            timer.expires_after(subsys_poll_time * 1);
+            timer.expires_after(subsysPollTime * 1);
             timer.async_wait([&](boost::system::error_code) {
-                system_bus->async_method_call(
+                systemBus->async_method_call(
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // not storage controller should be listed.
@@ -305,9 +302,9 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                         << j.dump(2) << std::endl;
                     // restart the subsystem
                     subsys->start();
-                    timer.expires_after(subsys_poll_time * 2);
+                    timer.expires_after(subsysPollTime * 2);
                     timer.async_wait([&](boost::system::error_code) {
-                        system_bus->async_method_call(
+                        systemBus->async_method_call(
                             [&](boost::system::error_code,
                                 const GetSubTreeType& result) {
                             EXPECT_EQ(result.size(), 2);
@@ -316,9 +313,9 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                             // subsys.reset();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(subsys_poll_time * 1);
+                            timer.expires_after(subsysPollTime * 1);
                             timer.async_wait([&](boost::system::error_code) {
-                                system_bus->async_method_call(
+                                systemBus->async_method_call(
                                     [&](boost::system::error_code,
                                         const GetSubTreeType& result) {
                                     // not storage controller should be listed.
@@ -331,7 +328,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                                     "xyz.openbmc_project.ObjectMapper",
                                     "/xyz/openbmc_project/object_mapper",
                                     "xyz.openbmc_project.ObjectMapper",
-                                    "GetSubTree", subsys_path, 0,
+                                    "GetSubTree", subsysPath, 0,
                                     std::vector<std::string>{
                                         "xyz.openbmc_project.Inventory."
                                         "Item.StorageController"});
@@ -340,7 +337,7 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
                             "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                            subsys_path, 0,
+                            subsysPath, 0,
                             std::vector<std::string>{
                                 "xyz.openbmc_project.Inventory.Item.StorageController"});
                     });
@@ -348,13 +345,13 @@ TEST_F(NVMeTest, TestSubsystemStartStop)
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                    subsys_path, 0,
+                    subsysPath, 0,
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
         }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
+            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsysPath, 0,
             std::vector<std::string>{
                 "xyz.openbmc_project.Inventory.Item.StorageController"});
     });
@@ -375,9 +372,9 @@ TEST_F(NVMeTest, TestDriveFunctional)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(subsys_poll_time * 2);
+    timer.expires_after(subsysPollTime * 2);
     timer.async_wait([&](boost::system::error_code) {
-        system_bus->async_method_call(
+        systemBus->async_method_call(
             [&](boost::system::error_code, const GetSubTreeType& result) {
             // Only PF and the enabled VF should be listed
             EXPECT_EQ(result.size(), 2);
@@ -399,9 +396,9 @@ TEST_F(NVMeTest, TestDriveFunctional)
             });
 
             // wait for storage controller destruction.
-            timer.expires_after(subsys_poll_time * 2);
+            timer.expires_after(subsysPollTime * 2);
             timer.async_wait([&](boost::system::error_code) {
-                system_bus->async_method_call(
+                systemBus->async_method_call(
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // no storage controller should be listed.
@@ -419,9 +416,9 @@ TEST_F(NVMeTest, TestDriveFunctional)
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
                     });
-                    timer.expires_after(subsys_poll_time * 2);
+                    timer.expires_after(subsysPollTime * 2);
                     timer.async_wait([&](boost::system::error_code) {
-                        system_bus->async_method_call(
+                        systemBus->async_method_call(
                             [&](boost::system::error_code,
                                 const GetSubTreeType& result) {
                             // storage controller should be restored.
@@ -431,9 +428,9 @@ TEST_F(NVMeTest, TestDriveFunctional)
                             // subsys.reset();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(subsys_poll_time * 1);
+                            timer.expires_after(subsysPollTime * 1);
                             timer.async_wait([&](boost::system::error_code) {
-                                system_bus->async_method_call(
+                                systemBus->async_method_call(
                                     [&](boost::system::error_code,
                                         const GetSubTreeType& result) {
                                     // not storage controller should be listed.
@@ -446,7 +443,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                                     "xyz.openbmc_project.ObjectMapper",
                                     "/xyz/openbmc_project/object_mapper",
                                     "xyz.openbmc_project.ObjectMapper",
-                                    "GetSubTree", subsys_path, 0,
+                                    "GetSubTree", subsysPath, 0,
                                     std::vector<std::string>{
                                         "xyz.openbmc_project.Inventory."
                                         "Item.StorageController"});
@@ -455,7 +452,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
                             "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                            subsys_path, 0,
+                            subsysPath, 0,
                             std::vector<std::string>{
                                 "xyz.openbmc_project.Inventory."
                                 "Item.StorageController"});
@@ -464,13 +461,13 @@ TEST_F(NVMeTest, TestDriveFunctional)
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                    subsys_path, 0,
+                    subsysPath, 0,
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
         }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
+            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsysPath, 0,
             std::vector<std::string>{
                 "xyz.openbmc_project.Inventory.Item.StorageController"});
     });
@@ -491,9 +488,9 @@ TEST_F(NVMeTest, TestDriveAbsent)
     EXPECT_CALL(mock, miScanCtrl).Times(AtLeast(1));
 
     // wait for subsystem initialization
-    timer.expires_after(subsys_poll_time * 2);
+    timer.expires_after(subsysPollTime * 2);
     timer.async_wait([&](boost::system::error_code) {
-        system_bus->async_method_call(
+        systemBus->async_method_call(
             [&](boost::system::error_code, const GetSubTreeType& result) {
             // Only PF and the enabled VF should be listed
             EXPECT_EQ(result.size(), 2);
@@ -513,9 +510,9 @@ TEST_F(NVMeTest, TestDriveAbsent)
             });
 
             // wait for storage controller destruction.
-            timer.expires_after(subsys_poll_time * 2);
+            timer.expires_after(subsysPollTime * 2);
             timer.async_wait([&](boost::system::error_code) {
-                system_bus->async_method_call(
+                systemBus->async_method_call(
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // no storage controller should be listed.
@@ -533,9 +530,9 @@ TEST_F(NVMeTest, TestDriveAbsent)
                         return mock.fake->miSubsystemHealthStatusPoll(
                             std::move(cb));
                     });
-                    timer.expires_after(subsys_poll_time * 2);
+                    timer.expires_after(subsysPollTime * 2);
                     timer.async_wait([&](boost::system::error_code) {
-                        system_bus->async_method_call(
+                        systemBus->async_method_call(
                             [&](boost::system::error_code,
                                 const GetSubTreeType& result) {
                             // storage controller should be restored.
@@ -544,9 +541,9 @@ TEST_F(NVMeTest, TestDriveAbsent)
                             subsys->stop();
 
                             // wait for storage controller destruction.
-                            timer.expires_after(subsys_poll_time * 1);
+                            timer.expires_after(subsysPollTime * 1);
                             timer.async_wait([&](boost::system::error_code) {
-                                system_bus->async_method_call(
+                                systemBus->async_method_call(
                                     [&](boost::system::error_code,
                                         const GetSubTreeType& result) {
                                     // not storage controller should be listed.
@@ -559,7 +556,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                                     "xyz.openbmc_project.ObjectMapper",
                                     "/xyz/openbmc_project/object_mapper",
                                     "xyz.openbmc_project.ObjectMapper",
-                                    "GetSubTree", subsys_path, 0,
+                                    "GetSubTree", subsysPath, 0,
                                     std::vector<std::string>{
                                         "xyz.openbmc_project.Inventory."
                                         "Item.StorageController"});
@@ -568,7 +565,7 @@ TEST_F(NVMeTest, TestDriveAbsent)
                             "xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
                             "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                            subsys_path, 0,
+                            subsysPath, 0,
                             std::vector<std::string>{
                                 "xyz.openbmc_project.Inventory."
                                 "Item.StorageController"});
@@ -577,13 +574,13 @@ TEST_F(NVMeTest, TestDriveAbsent)
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                    subsys_path, 0,
+                    subsysPath, 0,
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
         }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
+            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsysPath, 0,
             std::vector<std::string>{
                 "xyz.openbmc_project.Inventory.Item.StorageController"});
     });
@@ -699,18 +696,18 @@ TEST_F(NVMeTest, InitErrorInjection)
 
     // wait for subsystem initialization, each failure will introduce 1 second
     // delay for retry
-    timer.expires_after(subsys_poll_time * (2 + 10));
+    timer.expires_after(subsysPollTime * (2 + 10));
     timer.async_wait([&](boost::system::error_code) {
-        system_bus->async_method_call(
+        systemBus->async_method_call(
             [&, this](boost::system::error_code, const GetSubTreeType& result) {
             // Only PF and the enabled VF should be listed
             EXPECT_EQ(result.size(), 2);
             subsys->stop();
 
             // wait for storage controller destruction.
-            timer.expires_after(subsys_poll_time * 1);
+            timer.expires_after(subsysPollTime * 1);
             timer.async_wait([&](boost::system::error_code) {
-                system_bus->async_method_call(
+                systemBus->async_method_call(
                     [&](boost::system::error_code,
                         const GetSubTreeType& result) {
                     // not storage controller should be listed.
@@ -723,13 +720,13 @@ TEST_F(NVMeTest, InitErrorInjection)
                     "xyz.openbmc_project.ObjectMapper",
                     "/xyz/openbmc_project/object_mapper",
                     "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-                    subsys_path, 0,
+                    subsysPath, 0,
                     std::vector<std::string>{"xyz.openbmc_project.Inventory."
                                              "Item.StorageController"});
             });
         }, "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsys_path, 0,
+            "xyz.openbmc_project.ObjectMapper", "GetSubTree", subsysPath, 0,
             std::vector<std::string>{
                 "xyz.openbmc_project.Inventory.Item.StorageController"});
     });

@@ -59,40 +59,39 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
                          std::function<void(const std::error_code&,
                                             nvme_status_field)>&& cb) override;
 
-    void adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
-                   std::span<uint8_t> data, unsigned int timeout_ms,
+    void adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& adminReq,
+                   std::span<uint8_t> data, unsigned int timeoutMs,
                    std::function<void(const std::error_code&,
                                       const nvme_mi_admin_resp_hdr&,
                                       std::span<uint8_t>)>&& cb) override;
 
     void adminSecuritySend(nvme_mi_ctrl_t ctrl, uint8_t proto,
-                           uint16_t proto_specific, std::span<uint8_t> data,
+                           uint16_t protoSpecific, std::span<uint8_t> data,
                            std::function<void(const std::error_code&,
-                                              int nvme_status)>&& cb) override;
+                                              int nvmeStatus)>&& cb) override;
 
     void adminSecurityReceive(
-        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t proto_specific,
-        uint32_t transfer_length,
-        std::function<void(const std::error_code&, int nvme_status,
+        nvme_mi_ctrl_t ctrl, uint8_t proto, uint16_t protoSpecific,
+        uint32_t transferLength,
+        std::function<void(const std::error_code&, int nvmeStatus,
                            std::span<uint8_t> data)>&& cb) override;
 
     void adminNonDataCmd(
         nvme_mi_ctrl_t ctrl, uint8_t opcode, uint32_t cdw1, uint32_t cdw2,
         uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
         uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
-        std::function<void(const std::error_code&, int nvme_status,
-                           uint32_t comption_dw0)>&& cb);
+        std::function<void(const std::error_code&, int nvmeStatus,
+                           uint32_t comptionDw0)>&& cb);
 
     void createNamespace(
-        nvme_mi_ctrl_t ctrl, uint64_t size, size_t lba_format,
-        bool metadata_at_end,
-        std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
-        std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finished_cb)
+        nvme_mi_ctrl_t ctrl, uint64_t size, size_t lbaFormat,
+        bool metadataAtEnd, std::function<void(nvme_ex_ptr ex)>&& submittedCb,
+        std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finishedCb)
         override;
 
     void adminDeleteNamespace(
         nvme_mi_ctrl_t ctrl, uint32_t nsid,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb)
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb)
         override;
 
     void adminListNamespaces(
@@ -102,11 +101,11 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     void adminAttachDetachNamespace(
         nvme_mi_ctrl_t ctrl, uint16_t ctrlid, uint32_t nsid, bool attach,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb)
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb)
         override;
 
     void adminSanitize(nvme_mi_ctrl_t ctrl, enum nvme_sanitize_sanact sanact,
-                       uint8_t passes, uint32_t pattern, bool invert_pattern,
+                       uint8_t passes, uint32_t pattern, bool invertPattern,
                        std::function<void(nvme_ex_ptr ex)>&& cb) override;
 
     void start(const std::shared_ptr<MctpEndpoint>& ep) override;
@@ -116,7 +115,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
   private:
     // the transfer size for nvme mi messages.
     // define in github.com/linux-nvme/libnvme/blob/master/src/nvme/mi.c
-    static constexpr size_t nvme_mi_xfer_size = 4096;
+    static constexpr size_t nvmeMiXferSize = 4096;
 
     static nvme_root_t nvmeRoot;
 
@@ -183,11 +182,11 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
 
     void
         miConfigureRemoteMCTP(uint8_t port, uint16_t mtu,
-                              uint8_t max_supported_freq,
+                              uint8_t maxSupportedFreq,
                               std::function<void(const std::error_code&)>&& cb);
 
     void miConfigureSMBusFrequency(
-        uint8_t port_id, uint8_t max_supported_freq,
+        uint8_t portId, uint8_t maxSupportedFreq,
         std::function<void(const std::error_code&)>&& cb);
 
     void miSetMCTPConfiguration(
@@ -204,11 +203,11 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         return ::readingStateGood(readState);
     }
 
-    std::error_code try_post(std::function<void(void)>&& func);
+    std::error_code tryPost(std::function<void(void)>&& func);
 
     void adminFwDownloadChunk(
         nvme_mi_ctrl_t ctrl, std::string firmwarefile, size_t size,
-        size_t offset, int attempt_count,
+        size_t offset, int attemptCount,
         std::function<void(const std::error_code&, nvme_status_field)>&& cb);
 
     void getTelemetryLogChunk(
@@ -216,5 +215,5 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         std::vector<uint8_t>&& data,
         std::function<void(const std::error_code&, std::span<uint8_t>)>&& cb);
 
-    size_t getBlockSize(nvme_mi_ctrl_t ctrl, size_t lba_format);
+    static size_t getBlockSize(nvme_mi_ctrl_t ctrl, size_t lbaFormat);
 };

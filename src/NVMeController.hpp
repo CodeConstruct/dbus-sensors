@@ -197,7 +197,7 @@ class NVMeControllerEnabled :
      * process.
      */
     NVMeAdmin::FwCommitStatus
-        firmwareCommitStatus(NVMeAdmin::FwCommitStatus) override;
+        firmwareCommitStatus(NVMeAdmin::FwCommitStatus commitStatus) override;
 
     /** @brief Implementation for FirmwareCommitAsync
      *  Send Firmware Commit command to NVMe device
@@ -214,8 +214,8 @@ class NVMeControllerEnabled :
      * Used to reset the the status back to ready if the download is not in
      * process.
      */
-    NVMeAdmin::FwDownloadStatus
-        firmwareDownloadStatus(NVMeAdmin::FwDownloadStatus) override;
+    NVMeAdmin::FwDownloadStatus firmwareDownloadStatus(
+        NVMeAdmin::FwDownloadStatus downloadStatus) override;
 
     /** @brief Implementation for FirmwareDownloadAsync
      *  Send Firmware Image to the NVMe device
@@ -225,12 +225,12 @@ class NVMeControllerEnabled :
     void firmwareDownloadAsync(std::string pathToImage) override;
 
     void securitySendMethod(boost::asio::yield_context yield, uint8_t proto,
-                            uint16_t proto_specific, std::span<uint8_t> data);
+                            uint16_t protoSpecific, std::span<uint8_t> data);
 
     std::vector<uint8_t> securityReceiveMethod(boost::asio::yield_context yield,
                                                uint8_t proto,
-                                               uint16_t proto_specific,
-                                               uint32_t transfer_length);
+                                               uint16_t protoSpecific,
+                                               uint32_t transferLength);
 
     std::tuple<uint32_t, uint32_t, uint32_t>
         adminNonDataCmdMethod(boost::asio::yield_context yield, uint8_t opcode,
@@ -239,8 +239,8 @@ class NVMeControllerEnabled :
                               uint32_t cdw13, uint32_t cdw14, uint32_t cdw15);
 
     void attachVolume(boost::asio::yield_context yield,
-                      const sdbusplus::message::object_path& volPath);
+                      const sdbusplus::message::object_path& volumePath);
 
     void detachVolume(boost::asio::yield_context yield,
-                      const sdbusplus::message::object_path& volPath);
+                      const sdbusplus::message::object_path& volumePath);
 };

@@ -92,7 +92,7 @@ inline std::optional<std::string>
         {
             return std::nullopt;
         }
-        else if (*name == "board")
+        if (*name == "board")
         {
             break;
         }

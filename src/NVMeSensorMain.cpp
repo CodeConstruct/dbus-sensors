@@ -383,7 +383,9 @@ static void handleConfigurations(
 
         auto find = updatedDevices.find(interfacePath);
         if (find == updatedDevices.end())
+        {
             continue;
+        }
         try
         {
             auto nvmeSubsys = NVMeSubsystem::create(
@@ -508,7 +510,9 @@ static void interfaceRemoved(sdbusplus::message_t& message, NVMEMap& devices)
 int main()
 {
     if (singleWorkerFeature)
+    {
         std::cerr << "singleWorkerFeature on " << std::endl;
+    }
 
     // Load plugin shared libraries
     try
@@ -585,8 +589,8 @@ int main()
     // closed by the client. It should not be considered as an error.
     boost::asio::signal_set signals(io, SIGPIPE);
     signals.async_wait(
-        [](const boost::system::error_code& error, int signal_number) {
-        std::cerr << "signal: " << strsignal(signal_number) << ", "
+        [](const boost::system::error_code& error, int signalNumber) {
+        std::cerr << "signal: " << strsignal(signalNumber) << ", "
                   << error.message() << std::endl;
     });
     io.run();

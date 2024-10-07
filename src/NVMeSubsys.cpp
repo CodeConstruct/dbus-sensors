@@ -37,12 +37,12 @@ std::vector<Association> NVMeSubsystem::makeAssociation() const
     associations.emplace_back("chassis", "drive", p.parent_path().string());
     associations.emplace_back("drive", "storage", path);
 
-    for (auto& [_, prog] : createProgress)
+    for (const auto& [_, prog] : createProgress)
     {
         associations.emplace_back("awaiting", "awaited", prog->path);
     }
 
-    for (auto& [_, vol] : volumes)
+    for (const auto& [_, vol] : volumes)
     {
         associations.emplace_back("containing", "contained", vol->path);
     }
@@ -171,8 +171,8 @@ void NVMeSubsystem::processSecondaryControllerList(
         // Check Secondary Controller State
         if (secCntlrList->sc_entry[i].scs != 0)
         {
-            secondaryController = NVMeControllerEnabled::create(
-                std::move(*secondaryController.get()));
+            secondaryController =
+                NVMeControllerEnabled::create(std::move(*secondaryController));
         }
         secondaryController->setSecondary();
         secCntrls.push_back(secondaryController);
@@ -344,7 +344,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
             [self{shared_from_this()},
              nvme](const std::error_code& ec,
                    const std::vector<nvme_mi_ctrl_t>& ctrlList) mutable {
-            if (ec || ctrlList.size() == 0)
+            if (ec || ctrlList.empty())
             {
                 // TODO: mark the subsystem invalid and reschedule refresh
                 std::cerr << "fail to scan controllers for the nvme subsystem"
@@ -357,7 +357,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
 
             // TODO: manually open nvme_mi_ctrl_t from cntrl id, instead hacking
             // into structure of nvme_mi_ctrl
-            for (auto c : ctrlList)
+            for (auto* c : ctrlList)
             {
                 /* calucate the cntrl id from nvme_mi_ctrl:
                 struct nvme_mi_ctrl
@@ -418,7 +418,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                 self->processSecondaryControllerList(nullptr);
                 return;
             }
-            auto ctrl = ctrlList.back();
+            auto* ctrl = ctrlList.back();
             nvme->adminIdentify(
                 ctrl, nvme_identify_cns::NVME_IDENTIFY_CNS_SECONDARY_CTRL_LIST,
                 0, 0,
@@ -595,7 +595,7 @@ void NVMeSubsystem::start()
                 return;
             }
             // The device is physically absent
-            else if (error == std::errc::no_such_device)
+            if (error == std::errc::no_such_device)
             {
                 std::cerr << "error reading ctemp from subsystem"
                           << ", reason:" << error.message() << "\n";
@@ -604,7 +604,7 @@ void NVMeSubsystem::start()
                 return;
             }
             // other communication errors
-            else if (error)
+            if (error)
             {
                 std::cerr << "error reading ctemp from subsystem"
                           << ", reason:" << error.message() << "\n";
@@ -704,7 +704,7 @@ void NVMeSubsystem::start()
 
                 return;
             }
-            else if (error)
+            if (error)
             {
                 std::cerr << "error reading ctemp "
                              "from subsystem"
@@ -723,7 +723,7 @@ void NVMeSubsystem::start()
             }
 
             // Drive Functional
-            bool df = status->nss & 0x20;
+            bool df = (status->nss & 0x20) != 0;
             if (!df)
             {
                 // stop the subsystem
@@ -797,7 +797,7 @@ sdbusplus::message::object_path
     }
 
     // #0 (sequence of runtime/callbacks)
-    auto prog_id = getRandomId();
+    auto progId = getRandomId();
 
     auto pc = getPrimaryController();
     nvme_mi_ctrl_t ctrl = pc->getMiCtrl();
@@ -807,7 +807,7 @@ sdbusplus::message::object_path
     using submit_callback_t = void(std::tuple<nvme_ex_ptr>);
     auto [ex] = boost::asio::async_initiate<boost::asio::yield_context,
                                             submit_callback_t>(
-        [weak{weak_from_this()}, prog_id, intf, ctrl, size, lbaFormat,
+        [weak{weak_from_this()}, progId, intf, ctrl, size, lbaFormat,
          metadataAtEnd](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
@@ -826,7 +826,7 @@ sdbusplus::message::object_path
         },
 
             // finished_cb
-            [weak, prog_id](nvme_ex_ptr ex, NVMeNSIdentify newns) mutable {
+            [weak, progId](nvme_ex_ptr ex, NVMeNSIdentify newns) mutable {
             // #5. This will only be called once #4 completes.
             // It will not be called if the submit failed.
             auto self = weak.lock();
@@ -837,7 +837,7 @@ sdbusplus::message::object_path
                 return;
             }
             // The NS create has completed (either successfully or not)
-            self->createVolumeFinished(prog_id, ex, newns);
+            self->createVolumeFinished(progId, ex, newns);
         });
     },
         yield);
@@ -851,10 +851,10 @@ sdbusplus::message::object_path
     }
 
     // Progress endpoint for clients to poll, if the submit was successful.
-    std::string prog_path = path + "/CreateProgress/" + prog_id;
+    std::string progPath = path + "/CreateProgress/" + progId;
 
-    auto prog = std::make_shared<NVMeCreateVolumeProgress>(conn, prog_path);
-    if (!createProgress.insert({prog_id, prog}).second)
+    auto prog = std::make_shared<NVMeCreateVolumeProgress>(conn, progPath);
+    if (!createProgress.insert({progId, prog}).second)
     {
         throw std::logic_error("duplicate progress id");
     }
@@ -862,15 +862,15 @@ sdbusplus::message::object_path
     updateAssociation();
 
     // #4
-    return prog_path;
+    return progPath;
 }
 
-void NVMeSubsystem::createVolumeFinished(std::string prog_id, nvme_ex_ptr ex,
+void NVMeSubsystem::createVolumeFinished(std::string progId, nvme_ex_ptr ex,
                                          NVMeNSIdentify ns)
 {
     try
     {
-        auto p = createProgress.find(prog_id);
+        auto p = createProgress.find(progId);
         if (p == createProgress.end())
         {
             throw std::logic_error("Missing progress entry");
@@ -950,16 +950,16 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
     nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
 
     // msb 6:5 and lsb 3:0
-    size_t lbaf_index = ((id.flbas >> 1) & 0x30) | (id.flbas & 0x0f);
-    size_t blockSize = 1ul << id.lbaf[lbaf_index].ds;
-    bool metadataAtEnd = id.flbas & (1 << 4);
+    size_t lbafIndex = ((id.flbas >> 1) & 0x30) | (id.flbas & 0x0f);
+    size_t blockSize = 1UL << id.lbaf[lbafIndex].ds;
+    bool metadataAtEnd = (id.flbas & (1 << 4)) != 0;
 
     NVMeNSIdentify ns = {
         .namespaceId = nsid,
         .size = ::le64toh(id.nsze * blockSize),
         .capacity = ::le64toh(id.ncap * blockSize),
         .blockSize = blockSize,
-        .lbaFormat = lbaf_index,
+        .lbaFormat = lbafIndex,
         .metadataAtEnd = metadataAtEnd,
     };
 
@@ -1226,10 +1226,10 @@ std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
 
     if (volumes.contains(ns.namespaceId))
     {
-        std::string err_msg = std::string("Internal error, NSID exists " +
-                                          std::to_string(ns.namespaceId));
-        std::cerr << err_msg << "\n";
-        throw makeLibNVMeError(err_msg);
+        std::string errMsg = std::string("Internal error, NSID exists " +
+                                         std::to_string(ns.namespaceId));
+        std::cerr << errMsg << "\n";
+        throw makeLibNVMeError(errMsg);
     }
 
     auto vol = NVMeVolume::create(objServer, conn, shared_from_this(), ns);
@@ -1242,12 +1242,12 @@ std::shared_ptr<NVMeVolume> NVMeSubsystem::addVolume(const NVMeNSIdentify& ns)
 void NVMeSubsystem::forgetVolume(std::shared_ptr<NVMeVolume> volume)
 {
     // remove any progress references
-    for (const auto& [prog_id, prog] : createProgress)
+    for (const auto& [progId, prog] : createProgress)
     {
         std::string s = prog->volumePath();
         if (prog->volumePath() == volume->path)
         {
-            createProgress.erase(prog_id);
+            createProgress.erase(progId);
             break;
         }
     }
@@ -1308,7 +1308,7 @@ void NVMeSubsystem::querySupportedFormats(boost::asio::yield_context yield)
     std::vector<LBAFormat> formats;
     for (size_t i = 0; i < nlbaf; i++)
     {
-        size_t blockSize = 1ul << id.lbaf[i].ds;
+        size_t blockSize = 1UL << id.lbaf[i].ds;
         size_t metadataSize = id.lbaf[i].ms;
         RelPerf rp = relativePerformanceFromRP(id.lbaf[i].rp);
         std::cerr << name << ": lbaf " << i << " blocksize " << blockSize
@@ -1335,20 +1335,20 @@ void NVMeSubsystem::deleteVolume(boost::asio::yield_context yield,
     auto intf = std::get<std::shared_ptr<NVMeMiIntf>>(nvmeIntf.getInferface());
 
     using callback_t = void(std::tuple<std::error_code, int>);
-    auto [err, nvme_status] =
+    auto [err, nvmeStatus] =
         boost::asio::async_initiate<boost::asio::yield_context, callback_t>(
             [intf, ctrl, nsid{volume->namespaceId()}](auto&& handler) {
         auto h = asio_helper::CopyableCallback(std::move(handler));
 
         intf->adminDeleteNamespace(
             ctrl, nsid,
-            [h](const std::error_code& err, int nvme_status) mutable {
-            h(std::make_tuple(err, nvme_status));
+            [h](const std::error_code& err, int nvmeStatus) mutable {
+            h(std::make_tuple(err, nvmeStatus));
         });
     }, yield);
 
     // exception must be thrown outside of the async block
-    checkLibNVMeError(err, nvme_status, "Delete");
+    checkLibNVMeError(err, nvmeStatus, "Delete");
 
     forgetVolume(volume);
 }
@@ -1404,10 +1404,10 @@ void NVMeSubsystem::sanitizeStatus(
 
         nvme_sanitize_log_page* log =
             reinterpret_cast<nvme_sanitize_log_page*>(data.data());
-        uint8_t san_status = log->sstat & NVME_SANITIZE_SSTAT_STATUS_MASK;
-        cb(nvme_ex_ptr(), san_status == NVME_SANITIZE_SSTAT_STATUS_IN_PROGESS,
-           san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED,
-           san_status == NVME_SANITIZE_SSTAT_STATUS_COMPLETE_SUCCESS,
-           log->sstat, log->sprog, log->scdw10);
+        uint8_t sanStatus = log->sstat & NVME_SANITIZE_SSTAT_STATUS_MASK;
+        cb(nvme_ex_ptr(), sanStatus == NVME_SANITIZE_SSTAT_STATUS_IN_PROGESS,
+           sanStatus == NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED,
+           sanStatus == NVME_SANITIZE_SSTAT_STATUS_COMPLETE_SUCCESS, log->sstat,
+           log->sprog, log->scdw10);
     });
 }

@@ -72,7 +72,8 @@ void NVMeVolume::erase(VolumeBase::EraseMethod eraseType)
 
 // Additional methods on Volume that are not relevant.
 
-void NVMeVolume::formatLuks(std::vector<uint8_t>, VolumeBase::FilesystemType)
+void NVMeVolume::formatLuks([[maybe_unused]] std::vector<uint8_t> password,
+                            [[maybe_unused]] VolumeBase::FilesystemType type)
 {
     throw std::runtime_error("Method Not Supported");
 }
@@ -82,12 +83,14 @@ void NVMeVolume::lock()
     throw std::runtime_error("Method Not Supported");
 }
 
-void NVMeVolume::unlock(std::vector<uint8_t>)
+void NVMeVolume::unlock([[maybe_unused]] std::vector<uint8_t> password)
 {
     throw std::runtime_error("Method Not Supported");
 }
 
-void NVMeVolume::changePassword(std::vector<uint8_t>, std::vector<uint8_t>)
+void NVMeVolume::changePassword(
+    [[maybe_unused]] std::vector<uint8_t> oldPassword,
+    [[maybe_unused]] std::vector<uint8_t> newPassword)
 {
     throw std::runtime_error("Method Not Supported");
 }

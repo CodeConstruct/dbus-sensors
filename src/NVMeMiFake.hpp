@@ -6,16 +6,16 @@
 #include <iostream>
 #include <thread>
 
-struct list_node
+struct ListNode
 {
-    list_node *next, *prev;
+    ListNode *next, *prev;
 };
 
 struct nvme_mi_ctrl
 {
     void* ep;
     __u16 id;
-    list_node ep_entry;
+    ListNode ep_entry;
 };
 
 class NVMeMiFake :
@@ -39,7 +39,7 @@ class NVMeMiFake :
             // std::condition_variable.
             io.stop();
             io.restart();
-            while (1)
+            while (true)
             {
                 // mimik the communication delay.
                 std::this_thread::sleep_for(delay);
@@ -145,7 +145,8 @@ class NVMeMiFake :
     }
 
     void adminIdentify(
-        nvme_mi_ctrl_t, nvme_identify_cns cns, uint32_t, uint16_t,
+        [[maybe_unused]] nvme_mi_ctrl_t ctrl, nvme_identify_cns cns,
+        [[maybe_unused]] uint32_t nsid, [[maybe_unused]] uint16_t cntid,
         std::function<void(nvme_ex_ptr, std::span<uint8_t>)>&& cb) override
     {
         std::cerr << "identify" << std::endl;
@@ -201,7 +202,7 @@ class NVMeMiFake :
                             if (lsp == NVME_LOG_TELEM_HOST_LSP_CREATE)
                             {
                                 log.lpi = 0x07;
-                                if (rc)
+                                if (rc != 0)
                                 {
                                     std::cerr
                                         << "failed to create telemetry host log"
@@ -224,7 +225,7 @@ class NVMeMiFake :
                                         static_cast<uint8_t>(str[i]);
                                 }
 
-                                if (rc)
+                                if (rc != 0)
                                 {
                                     std::cerr
                                         << "failed to retain telemetry host "
@@ -308,7 +309,7 @@ class NVMeMiFake :
                     });
                     return;
                 }
-                else if (rc > 0)
+                if (rc > 0)
                 {
                     switch (rc & 0x7ff)
                     {
@@ -345,7 +346,7 @@ class NVMeMiFake :
         }
     }
 
-    void adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& admin_req,
+    void adminXfer(nvme_mi_ctrl_t ctrl, const nvme_mi_admin_req_hdr& adminReq,
                    std::span<uint8_t> data, unsigned int /*timeout_ms*/,
                    std::function<void(const std::error_code&,
                                       const nvme_mi_admin_resp_hdr&,
@@ -355,7 +356,7 @@ class NVMeMiFake :
         {
             std::vector<uint8_t> req(sizeof(nvme_mi_admin_req_hdr) +
                                      data.size());
-            memcpy(req.data(), &admin_req, sizeof(nvme_mi_admin_req_hdr));
+            memcpy(req.data(), &adminReq, sizeof(nvme_mi_admin_req_hdr));
             memcpy(req.data() + sizeof(nvme_mi_admin_req_hdr), data.data(),
                    data.size());
             post([ctrl, req{std::move(req)}, self{shared_from_this()},
@@ -422,18 +423,18 @@ class NVMeMiFake :
 
     void adminSecuritySend(
         [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint8_t proto,
-        [[maybe_unused]] uint16_t proto_specific,
+        [[maybe_unused]] uint16_t protoSpecific,
         [[maybe_unused]] std::span<uint8_t> data,
-        std::function<void(const std::error_code&, int nvme_status)>&& cb)
+        std::function<void(const std::error_code&, int nvmeStatus)>&& cb)
         override
     {
         cb(std::make_error_code(std::errc::not_supported), 0);
     }
     void adminSecurityReceive(
         [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint8_t proto,
-        [[maybe_unused]] uint16_t proto_specific,
-        [[maybe_unused]] uint32_t transfer_length,
-        std::function<void(const std::error_code&, int nvme_status,
+        [[maybe_unused]] uint16_t protoSpecific,
+        [[maybe_unused]] uint32_t transferLength,
+        std::function<void(const std::error_code&, int nvmeStatus,
                            const std::span<uint8_t> data)>&& cb) override
     {
         cb(std::make_error_code(std::errc::not_supported), 0, {});
@@ -457,19 +458,18 @@ class NVMeMiFake :
         [[maybe_unused]] uint32_t cdw13, [[maybe_unused]] uint32_t cdw14,
         [[maybe_unused]] uint32_t cdw15,
         [[maybe_unused]] std::function<void(
-            const std::error_code&, int nvme_status, uint32_t comption_dw0)>&&
-            cb) override
+            const std::error_code&, int nvmeStatus, uint32_t comptionDw0)>&& cb)
+        override
     {
         cb(std::make_error_code(std::errc::not_supported), 0, 0);
     }
 
     void createNamespace(
         [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint64_t size,
-        [[maybe_unused]] size_t lba_format,
-        [[maybe_unused]] bool metadata_at_end,
-        [[maybe_unused]] std::function<void(nvme_ex_ptr ex)>&& submitted_cb,
+        [[maybe_unused]] size_t lbaFormat, [[maybe_unused]] bool metadataAtEnd,
+        [[maybe_unused]] std::function<void(nvme_ex_ptr ex)>&& submittedCb,
         [[maybe_unused]] std::function<
-            void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finished_cb) override
+            void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finishedCb) override
     {
         /* TODO: return not support to the cb/s */
     }
@@ -477,7 +477,7 @@ class NVMeMiFake :
     void adminDeleteNamespace(
         [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint32_t nsid,
         [[maybe_unused]] std::function<void(const std::error_code&,
-                                            int nvme_status)>&& cb) override
+                                            int nvmeStatus)>&& cb) override
     {
         cb(std::make_error_code(std::errc::not_supported), 0);
     }
@@ -495,7 +495,7 @@ class NVMeMiFake :
         [[maybe_unused]] nvme_mi_ctrl_t ctrl, [[maybe_unused]] uint16_t ctrlid,
         [[maybe_unused]] uint32_t nsid, [[maybe_unused]] bool attach,
         [[maybe_unused]] std::function<void(const std::error_code&,
-                                            int nvme_status)>&& cb) override
+                                            int nvmeStatus)>&& cb) override
     {
         cb(std::make_error_code(std::errc::not_supported), 0);
     }
@@ -504,7 +504,7 @@ class NVMeMiFake :
         [[maybe_unused]] nvme_mi_ctrl_t ctrl,
         [[maybe_unused]] enum nvme_sanitize_sanact sanact,
         [[maybe_unused]] uint8_t passes, [[maybe_unused]] uint32_t pattern,
-        [[maybe_unused]] bool invert_pattern,
+        [[maybe_unused]] bool invertPattern,
         [[maybe_unused]] std::function<void(nvme_ex_ptr ex)>&& cb) override
     {
         /* TODO: return not support to the cb/s */
