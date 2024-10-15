@@ -367,7 +367,9 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     struct list_node ep_entry;
                 };
                 */
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                 uint16_t* index = reinterpret_cast<uint16_t*>(
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                     (reinterpret_cast<uint8_t*>(c) +
                      std::max(sizeof(uint16_t), sizeof(void*))));
                 std::filesystem::path path = std::filesystem::path(self->path) /
@@ -434,6 +436,7 @@ void NVMeSubsystem::markFunctional(bool toggle)
                     return;
                 }
                 nvme_secondary_ctrl_list* listHdr =
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                     reinterpret_cast<nvme_secondary_ctrl_list*>(data.data());
 
                 if (listHdr->num == 0)
@@ -501,6 +504,7 @@ void NVMeSubsystem::start()
     for (auto [_, lib] : pluginLibMap)
     {
         createplugin_t pluginFunc =
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
             reinterpret_cast<createplugin_t>(::dlsym(lib, "createPlugin"));
         auto p = pluginFunc(shared_from_this(), config);
         if (p)
@@ -947,6 +951,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
         throw *ex;
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
 
     // msb 6:5 and lsb 3:0
@@ -983,6 +988,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
         throw *ex;
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     nvme_ctrl_list& list = *reinterpret_cast<nvme_ctrl_list*>(data.data());
     uint16_t num = ::le16toh(list.num);
     if (num == NVME_ID_CTRL_LIST_MAX)
@@ -1084,12 +1090,13 @@ void NVMeSubsystem::fillDrive(boost::asio::yield_context yield)
             std::format("{}: Error for controller identify", name));
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     nvme_id_ctrl& id = *reinterpret_cast<nvme_id_ctrl*>(data.data());
-    drive->serialNumber(nvmeString(id.sn, sizeof(id.sn)));
-    drive->model(nvmeString(id.mn, sizeof(id.mn)));
-    drive->capacity(char128ToUint64(id.tnvmcap));
+    drive->serialNumber(nvmeString((const char*)id.sn, sizeof(id.sn)));
+    drive->model(nvmeString((const char*)id.mn, sizeof(id.mn)));
+    drive->capacity(char128ToUint64((const unsigned char*)id.tnvmcap));
 
-    auto fwVer = nvmeString(id.fr, sizeof(id.fr));
+    auto fwVer = nvmeString((const char*)id.fr, sizeof(id.fr));
     if (!fwVer.empty())
     {
         // Formatting per
@@ -1114,7 +1121,7 @@ std::shared_ptr<NVMeVolume> NVMeSubsystem::getVolume(
     }
 
     std::string id = volPath.filename();
-    uint32_t nsid;
+    uint32_t nsid = 0;
     auto e = std::from_chars(id.data(), id.data() + id.size(), nsid);
     if (e.ptr != id.data() + id.size() || e.ec != std::errc())
     {
@@ -1295,6 +1302,7 @@ void NVMeSubsystem::querySupportedFormats(boost::asio::yield_context yield)
             std::format("{}: Error getting LBA formats :{}", name, ex->what()));
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     nvme_id_ns& id = *reinterpret_cast<nvme_id_ns*>(data.data());
 
     // nlbaf is 0’s based
@@ -1403,6 +1411,7 @@ void NVMeSubsystem::sanitizeStatus(
         }
 
         nvme_sanitize_log_page* log =
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
             reinterpret_cast<nvme_sanitize_log_page*>(data.data());
         uint8_t sanStatus = log->sstat & NVME_SANITIZE_SSTAT_STATUS_MASK;
         cb(nvme_ex_ptr(), sanStatus == NVME_SANITIZE_SSTAT_STATUS_IN_PROGESS,

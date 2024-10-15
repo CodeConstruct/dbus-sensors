@@ -27,7 +27,6 @@ class NVMeMiFake :
         io(io), valid(true) /*, worker(workerIO.get_executor())*/
     {
         // start worker thread
-        workerStop = false;
         thread = std::thread([&io = workerIO, &stop = workerStop,
                               &mtx = workerMtx, &cv = workerCv,
                               &isNotified = workerIsNotified, delay]() {
@@ -98,7 +97,7 @@ class NVMeMiFake :
                            nvme_mi_nvm_ss_health_status*)>&& cb) override
     {
         io.post([cb{std::move(cb)}]() {
-            nvme_mi_nvm_ss_health_status status;
+            nvme_mi_nvm_ss_health_status status{};
             status.nss = 1 << 5;
             status.ctemp = 24;
             cb({}, &status);
@@ -158,7 +157,7 @@ class NVMeMiFake :
                 {
                     case NVME_IDENTIFY_CNS_SECONDARY_CTRL_LIST:
                     {
-                        nvme_secondary_ctrl_list list;
+                        nvme_secondary_ctrl_list list{};
                         list.num = 2;
                         list.sc_entry[0].pcid = 0;
                         list.sc_entry[0].scid = 1;
@@ -197,6 +196,7 @@ class NVMeMiFake :
                         {
                             data.resize(sizeof(nvme_telemetry_log));
                             nvme_telemetry_log& log =
+                                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                                 *reinterpret_cast<nvme_telemetry_log*>(
                                     data.data());
                             if (lsp == NVME_LOG_TELEM_HOST_LSP_CREATE)
@@ -246,6 +246,7 @@ class NVMeMiFake :
                         {
                             data.resize(sizeof(nvme_smart_log));
                             nvme_smart_log& log =
+                                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                                 *reinterpret_cast<nvme_smart_log*>(data.data());
                             uint8_t temp = 40;
                             log.temperature[0] = temp;
@@ -290,7 +291,7 @@ class NVMeMiFake :
     {
         try
         {
-            nvme_fw_commit_args args;
+            nvme_fw_commit_args args{};
             memset(&args, 0, sizeof(args));
             args.action = action;
             args.slot = slot;
@@ -364,6 +365,7 @@ class NVMeMiFake :
                 int rc = 0;
 
                 nvme_mi_admin_req_hdr* reqHeader =
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                     reinterpret_cast<nvme_mi_admin_req_hdr*>(req.data());
 
                 size_t respDataSize =
@@ -373,6 +375,7 @@ class NVMeMiFake :
                 size_t bufSize = sizeof(nvme_mi_admin_resp_hdr) + respDataSize;
                 std::vector<uint8_t> buf(bufSize);
                 nvme_mi_admin_resp_hdr* respHeader =
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                     reinterpret_cast<nvme_mi_admin_resp_hdr*>(buf.data());
                 (void)respHeader;
                 // rc = nvme_mi_admin_xfer(
@@ -401,11 +404,13 @@ class NVMeMiFake :
                                                 sizeof(nvme_mi_admin_resp_hdr),
                                             data.end());
                     nvme_smart_log& log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         *reinterpret_cast<nvme_smart_log*>(span.data());
                     uint8_t temp = 40;
                     log.temperature[0] = temp;
                     log.temperature[1] = 1;
                     cb({},
+                       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                        *reinterpret_cast<nvme_mi_admin_resp_hdr*>(data.data()),
                        span);
                 });
@@ -514,7 +519,7 @@ class NVMeMiFake :
     boost::asio::io_context& io;
     bool valid = false;
 
-    bool workerStop;
+    bool workerStop = false;
     std::mutex workerMtx;
     std::condition_variable workerCv;
     boost::asio::io_context workerIO;

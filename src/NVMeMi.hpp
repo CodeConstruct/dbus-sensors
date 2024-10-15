@@ -10,7 +10,7 @@
 class NVMeMiWorker
 {
   private:
-    bool workerStop;
+    bool workerStop = false;
     std::mutex workerMtx;
     std::condition_variable workerCv;
     boost::asio::io_context workerIO;
@@ -81,7 +81,7 @@ class NVMeMi : public NVMeMiIntf, public std::enable_shared_from_this<NVMeMi>
         uint32_t cdw3, uint32_t cdw10, uint32_t cdw11, uint32_t cdw12,
         uint32_t cdw13, uint32_t cdw14, uint32_t cdw15,
         std::function<void(const std::error_code&, int nvmeStatus,
-                           uint32_t comptionDw0)>&& cb);
+                           uint32_t comptionDw0)>&& cb) override;
 
     void createNamespace(
         nvme_mi_ctrl_t ctrl, uint64_t size, size_t lbaFormat,

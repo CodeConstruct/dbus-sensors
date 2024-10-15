@@ -235,7 +235,7 @@ sdbusplus::message::unix_fd NVMeControllerEnabled::getLogPage(uint8_t lid,
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
     }
 
-    std::array<int, 2> pipe;
+    std::array<int, 2> pipe{};
     if (::pipe(pipe.data()) < 0)
     {
         std::cerr << "GetLogPage fails to open pipe: " << std::strerror(errno)
@@ -325,7 +325,7 @@ sdbusplus::message::unix_fd
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
     }
 
-    std::array<int, 2> pipe;
+    std::array<int, 2> pipe{};
     if (::pipe(pipe.data()) < 0)
     {
         std::cerr << "Identify fails to open pipe: " << std::strerror(errno)
@@ -618,7 +618,7 @@ void NVMeControllerEnabled::attachVolume(
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
     }
 
-    uint32_t nsid;
+    uint32_t nsid = 0;
     if (auto s = subsys.lock())
     {
         auto vol = s->getVolume(volumePath);
@@ -679,7 +679,7 @@ void NVMeControllerEnabled::detachVolume(
         throw sdbusplus::xyz::openbmc_project::Common::Error::Unavailable();
     }
 
-    uint32_t nsid;
+    uint32_t nsid = 0;
     if (auto s = subsys.lock())
     {
         auto vol = s->getVolume(volumePath);

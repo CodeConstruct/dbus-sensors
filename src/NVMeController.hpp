@@ -70,7 +70,9 @@ class NVMeController
     // TODO: replace this with something from libnvme?
     uint16_t getCntrlId() const
     {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         return *reinterpret_cast<uint16_t*>(
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
             (reinterpret_cast<uint8_t*>(nvmeCtrl) +
              std::max(sizeof(uint16_t), sizeof(void*))));
     }

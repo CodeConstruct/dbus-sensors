@@ -10,8 +10,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#define xstr(s) str(s)
-#define str(s) #s
+#define xstr(s) str(s) // NOLINT
+#define str(s) #s      // NOLINT
 
 std::unordered_map<std::string, void*> pluginLibMap = {};
 class NVMeMiMock :
@@ -245,7 +245,7 @@ class NVMeTest : public ::testing::Test
         io.restart();
     }
 
-    static constexpr char subsysPath[] =
+    static constexpr char subsysPath[] = // NOLINT
         "/xyz/openbmc_project/inventory/Test_Chassis/Test_NVMe";
 
     static boost::asio::io_context io;
@@ -389,7 +389,7 @@ TEST_F(NVMeTest, TestDriveFunctional)
                           << std::endl;
                 // return status.nss.df = 0
                 return io.post([cb = std::move(cb)]() {
-                    nvme_mi_nvm_ss_health_status status;
+                    nvme_mi_nvm_ss_health_status status{};
                     status.nss = 0;
                     cb({}, &status);
                 });

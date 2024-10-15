@@ -411,10 +411,10 @@ std::string getRandomId()
 {
     static std::atomic_size_t counter;
     sd_id128_t id;
-    char s[SD_ID128_STRING_MAX];
+    std::array<char, SD_ID128_STRING_MAX> s{};
     sd_id128_randomize(&id);
-    sd_id128_to_string(id, s);
-    std::string r(s);
+    sd_id128_to_string(id, (char*)s.data());
+    std::string r((char*)s.data());
     r += '_';
     r += std::to_string(++counter);
     return r;

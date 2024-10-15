@@ -248,7 +248,6 @@ std::optional<std::error_code> NVMeMi::isEndpointDegraded() const
 
 NVMeMiWorker::NVMeMiWorker()
 { // start worker thread
-    workerStop = false;
     thread = std::thread([&io = workerIO, &stop = workerStop, &mtx = workerMtx,
                           &cv = workerCv, &isNotified = workerIsNotified]() {
         // With BOOST_ASIO_DISABLE_THREADS, boost::asio::executor_work_guard
@@ -357,7 +356,7 @@ void NVMeMi::miConfigureSMBusFrequency(
     {
         post([portId, maxSupportedFreq, ep{endpoint}, self{shared_from_this()},
               cb{std::move(cb)}]() mutable {
-            enum nvme_mi_config_smbus_freq smbusFreq;
+            enum nvme_mi_config_smbus_freq smbusFreq = {};
             auto rc = nvme_mi_mi_config_get_smbus_freq(self->nvmeEP, portId,
                                                        &smbusFreq);
             if (rc != 0)
@@ -467,7 +466,7 @@ void NVMeMi::miSetMCTPConfiguration(
         post([cb{std::move(cb)}, self{shared_from_this()}]() mutable {
             unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
             nvme_mi_ep_set_timeout(self->nvmeEP, initCmdTimeoutMS);
-            struct nvme_mi_read_nvm_ss_info ssInfo;
+            struct nvme_mi_read_nvm_ss_info ssInfo = {};
             auto rc = nvme_mi_mi_read_mi_data_subsys(self->nvmeEP, &ssInfo);
             nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
             if (rc != 0)
@@ -483,7 +482,7 @@ void NVMeMi::miSetMCTPConfiguration(
 
             for (uint8_t portId = 0; portId <= ssInfo.nump; portId++)
             {
-                struct nvme_mi_read_port_info portInfo;
+                struct nvme_mi_read_port_info portInfo = {};
                 auto rc = nvme_mi_mi_read_mi_data_port(self->nvmeEP, portId,
                                                        &portInfo);
                 if (rc != 0)
@@ -497,7 +496,7 @@ void NVMeMi::miSetMCTPConfiguration(
                 {
                     // SMBus ports = 0x2
                     uint16_t supportedMtu = portInfo.mmctptus;
-                    uint8_t supportedFreq = portInfo.smb.mme_freq;
+                    uint8_t supportedFreq = portInfo.smb.mme_freq; // NOLINT
                     self->io.post([self, portId, supportedMtu, supportedFreq,
                                    cb{std::move(cb)}]() mutable {
                         self->miConfigureRemoteMCTP(
@@ -582,7 +581,7 @@ void NVMeMi::miSubsystemHealthStatusPoll(
     try
     {
         post([self{shared_from_this()}, ep{endpoint}, cb{std::move(cb)}]() {
-            nvme_mi_nvm_ss_health_status ssHealth;
+            nvme_mi_nvm_ss_health_status ssHealth = {};
             auto rc = nvme_mi_mi_subsystem_health_status_poll(self->nvmeEP,
                                                               true, &ssHealth);
             if (rc < 0)
@@ -668,7 +667,7 @@ void NVMeMi::miScanCtrl(std::function<void(const std::error_code&,
             }
 
             std::vector<nvme_mi_ctrl_t> list;
-            nvme_mi_ctrl_t c;
+            nvme_mi_ctrl_t c = {};
             nvme_mi_for_each_ctrl(self->nvmeEP, c)
             {
                 list.push_back(c);
@@ -817,7 +816,7 @@ static int nvmeMiAdminGetLogTelemetryHostRae(nvme_mi_ctrl_t ctrl, bool /*rae*/,
 int getTelemetryLogSize(nvme_mi_ctrl_t ctrl, bool host, uint32_t& size)
 {
     int rc = 0;
-    nvme_telemetry_log log;
+    nvme_telemetry_log log = {};
     auto func = host ? nvmeMiAdminGetLogTelemetryHostRae
                      : nvme_mi_admin_get_log_telemetry_ctrl;
 
@@ -961,6 +960,7 @@ void NVMeMi::adminGetLogPage(
                     static constexpr int num = nvmeMiXferSize /
                                                sizeof(nvme_error_log_page);
                     nvme_error_log_page* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_error_log_page*>(data.data());
 
                     rc = nvme_mi_admin_get_log_error(ctrl, num, false, log);
@@ -976,6 +976,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_smart_log));
                     nvme_smart_log* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_smart_log*>(data.data());
                     rc = nvme_mi_admin_get_log_smart(ctrl, nsid, false, log);
                     if (rc != 0)
@@ -1000,6 +1001,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_firmware_slot));
                     nvme_firmware_slot* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_firmware_slot*>(data.data());
                     rc = nvme_mi_admin_get_log_fw_slot(ctrl, false, log);
                     if (rc != 0)
@@ -1014,6 +1016,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_cmd_effects_log));
                     nvme_cmd_effects_log* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_cmd_effects_log*>(data.data());
 
                     // nvme rev 1.3 doesn't support csi,
@@ -1033,6 +1036,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_self_test_log));
                     nvme_self_test_log* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_self_test_log*>(data.data());
                     rc = nvme_mi_admin_get_log_device_self_test(ctrl, log);
                     if (rc != 0)
@@ -1048,6 +1052,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_ns_list));
                     nvme_ns_list* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_ns_list*>(data.data());
                     rc = nvme_mi_admin_get_log_changed_ns_list(ctrl, false,
                                                                log);
@@ -1083,6 +1088,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_resv_notification_log));
                     nvme_resv_notification_log* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_resv_notification_log*>(
                             data.data());
 
@@ -1102,6 +1108,7 @@ void NVMeMi::adminGetLogPage(
                 {
                     data.resize(sizeof(nvme_sanitize_log_page));
                     nvme_sanitize_log_page* log =
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                         reinterpret_cast<nvme_sanitize_log_page*>(data.data());
 
                     int rc = nvme_mi_admin_get_log_sanitize(ctrl, false, log);
@@ -1193,6 +1200,7 @@ void NVMeMi::adminXfer(
             int rc = 0;
 
             nvme_mi_admin_req_hdr* reqHeader =
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                 reinterpret_cast<nvme_mi_admin_req_hdr*>(req.data());
 
             size_t respDataSize =
@@ -1202,6 +1210,7 @@ void NVMeMi::adminXfer(
             size_t bufSize = sizeof(nvme_mi_admin_resp_hdr) + respDataSize;
             std::vector<uint8_t> buf(bufSize);
             nvme_mi_admin_resp_hdr* respHeader =
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                 reinterpret_cast<nvme_mi_admin_resp_hdr*>(buf.data());
 
             // set timeout
@@ -1233,6 +1242,7 @@ void NVMeMi::adminXfer(
             self->io.post([cb{std::move(cb)}, data{std::move(buf)}]() mutable {
                 std::span<uint8_t> span(
                     data.begin() + sizeof(nvme_mi_admin_resp_hdr), data.end());
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                 cb({}, *reinterpret_cast<nvme_mi_admin_resp_hdr*>(data.data()),
                    span);
             });
@@ -1264,7 +1274,7 @@ void NVMeMi::adminFwCommit(
     }
     try
     {
-        nvme_fw_commit_args args;
+        nvme_fw_commit_args args{};
         memset(&args, 0, sizeof(args));
         args.args_size = sizeof(args);
         args.action = action;
@@ -1341,7 +1351,7 @@ void NVMeMi::adminFwDownloadChunk(
     {
         post([ctrl, firmwarefile, size, offset, attemptCount, cb{std::move(cb)},
               self{shared_from_this()}]() mutable {
-            char data[nvmeMiXferSize];
+            std::array<char, nvmeMiXferSize> data = {};
             std::ifstream fwFile(firmwarefile, std::ios::in | std::ios::binary);
             if (fwFile.fail())
             {
@@ -1354,15 +1364,15 @@ void NVMeMi::adminFwDownloadChunk(
                 return;
             }
             fwFile.seekg(offset, std::ios::beg);
-            nvme_fw_download_args args;
+            nvme_fw_download_args args = {};
             memset(&args, 0, sizeof(args));
             args.args_size = sizeof(args);
             int dataLen = std::min(size - offset, nvmeMiXferSize);
-            fwFile.read(data, dataLen);
+            fwFile.read((char*)data.data(), dataLen);
             fwFile.close();
             args.offset = offset;
             args.data_len = dataLen;
-            args.data = data;
+            args.data = (char*)data.data();
             unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
             nvme_mi_ep_set_timeout(self->nvmeEP, downloadDefaultTimeoutMS);
             int rc = nvme_mi_admin_fw_download(ctrl, &args);
@@ -1451,7 +1461,7 @@ void NVMeMi::adminSecuritySend(
     std::error_code postErr =
         tryPost([self{shared_from_this()}, ctrl, proto, protoSpecific, data,
                  cb{std::move(cb)}]() {
-        struct nvme_security_send_args args;
+        struct nvme_security_send_args args = {};
         memset(&args, 0x0, sizeof(args));
         args.secp = proto;
         args.spsp0 = protoSpecific & 0xff;
@@ -1496,7 +1506,7 @@ void NVMeMi::adminSecurityReceive(
                  transferLength, cb{std::move(cb)}]() {
         std::vector<uint8_t> data(transferLength);
 
-        struct nvme_security_receive_args args;
+        struct nvme_security_receive_args args = {};
         memset(&args, 0x0, sizeof(args));
         args.secp = proto;
         args.spsp0 = protoSpecific & 0xff;
@@ -1570,8 +1580,8 @@ void NVMeMi::adminNonDataCmd(
 /* throws a nvme_ex_ptr on failure */
 size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lbaFormat)
 {
-    struct nvme_id_ns id;
-    printf("getblocksize\n");
+    struct nvme_id_ns id = {};
+    std::cout << "getblocksize" << std::endl;
     int status = nvme_mi_admin_identify_ns(ctrl, NVME_NSID_ALL, &id);
     auto e = makeLibNVMeError(errno, status, "getBlockSize");
     if (e)
@@ -1579,7 +1589,8 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lbaFormat)
         throw e;
     }
 
-    printf("nlbaf %d, lbaf %d\n", (int)id.nlbaf, (int)lbaFormat);
+    std::cout << "nlbaf " << (int)id.nlbaf << "lbaf " << (int)lbaFormat
+              << std::endl;
 
     // Sanity check for the value from the drive
     size_t maxLbaf = std::min(63, (int)id.nlbaf);
@@ -1603,12 +1614,12 @@ void NVMeMi::createNamespace(
     std::function<void(nvme_ex_ptr ex)>&& submittedCb,
     std::function<void(nvme_ex_ptr ex, NVMeNSIdentify newid)>&& finishedCb)
 {
-    printf("createns %d\n", (int)gettid());
+    std::cout << "createns " << (int)gettid() << std::endl;
     std::error_code postErr =
         tryPost([self{shared_from_this()}, ctrl, size, lbaFormat, metadataAtEnd,
                  submittedCb{std::move(submittedCb)},
                  finishedCb{std::move(finishedCb)}]() {
-        size_t blockSize;
+        size_t blockSize = 0;
 
         try
         {
@@ -1634,7 +1645,7 @@ void NVMeMi::createNamespace(
 
         // TODO: this will become nvme_ns_mgmt_host_sw_specified in a newer
         // libnvme.
-        struct nvme_id_ns data;
+        struct nvme_id_ns data = {};
         uint32_t newNsid = 0;
 
         uint8_t flbas = 0;
@@ -1652,14 +1663,14 @@ void NVMeMi::createNamespace(
         data.ncap = ::htole64(blocks);
         data.flbas = flbas;
 
-        printf("verified %d\n", (int)gettid());
+        std::cout << "verified " << (int)gettid() << std::endl;
 
         // submission has been verified. Handle the cb in main thread
         // concurrently.
         self->io.post([submittedCb{std::move(submittedCb)}]() {
             submittedCb(nvme_ex_ptr());
         });
-        printf("after submitted_cb %d\n", (int)gettid());
+        std::cout << "after submitted_cb " << (int)gettid() << std::endl;
 
         unsigned timeout = nvme_mi_ep_get_timeout(self->nvmeEP);
         nvme_mi_ep_set_timeout(self->nvmeEP, namespaceDefaultTimeoutMS);
@@ -1697,7 +1708,7 @@ void NVMeMi::createNamespace(
 #endif
     });
 
-    printf("submitted cb %d\n", (int)gettid());
+    std::cout << "submitted cb " << (int)gettid() << std::endl;
 
     if (postErr)
     {
@@ -1738,15 +1749,15 @@ void NVMeMi::adminListNamespaces(
 {
     std::error_code postErr =
         tryPost([self{shared_from_this()}, ctrl, cb{std::move(cb)}]() {
-        int status;
-        int nvmeErrno;
+        int status = 0;
+        int nvmeErrno = 0;
         std::vector<uint32_t> ns;
         // sanity in case of bad drives, allows for >1million NSes
         const int maxIter = 1000;
 
         for (int i = 0; i < maxIter; i++)
         {
-            struct nvme_ns_list list;
+            struct nvme_ns_list list = {};
             uint32_t start = NVME_NSID_NONE;
             if (!ns.empty())
             {
@@ -1792,8 +1803,8 @@ void NVMeMi::adminAttachDetachNamespace(
 {
     std::error_code postErr = tryPost([self{shared_from_this()}, ctrl, nsid,
                                        attach, ctrlid, cb{std::move(cb)}]() {
-        struct nvme_ctrl_list ctrlList;
-        struct nvme_ns_attach_args args;
+        struct nvme_ctrl_list ctrlList = {};
+        struct nvme_ns_attach_args args = {};
         memset(&args, 0x0, sizeof(args));
 
         // TODO: add this to a newer libnvme
@@ -1837,7 +1848,7 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
     std::error_code postErr =
         tryPost([self{shared_from_this()}, ctrl, sanact, passes, pattern,
                  invertPattern, cb{std::move(cb)}]() {
-        struct nvme_sanitize_nvm_args args;
+        struct nvme_sanitize_nvm_args args = {};
         memset(&args, 0x0, sizeof(args));
         args.args_size = sizeof(args);
         args.sanact = sanact;
@@ -1848,7 +1859,7 @@ void NVMeMi::adminSanitize(nvme_mi_ctrl_t ctrl,
         nvme_mi_ep_set_timeout(self->nvmeEP, sanitizeDefaultTimeoutMS);
         int status = nvme_mi_admin_sanitize_nvm(ctrl, &args);
         nvme_mi_ep_set_timeout(self->nvmeEP, timeout);
-        printf("san status %d errno %d\n", status, errno);
+        std::cout << "san status " << status << "errno " << errno << std::endl;
 
         auto ex = makeLibNVMeError(errno, status, "adminSanitize");
         self->io.post([cb{std::move(cb)}, ex]() { cb(ex); });
