@@ -320,8 +320,7 @@ void NVMeMiWorker::post(std::function<void(void)>&& func)
 
 void NVMeMi::post(std::function<void(void)>&& func)
 {
-    worker->post([self{std::move(shared_from_this())},
-                  func{std::move(func)}]() { func(); });
+    worker->post([func{std::move(func)}]() { func(); });
 }
 
 // Calls .post(), catching runtime_error and returning an error code on failure.
