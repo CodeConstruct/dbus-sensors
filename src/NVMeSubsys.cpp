@@ -851,7 +851,7 @@ sdbusplus::message::object_path
     // Exception must be thrown outside of the async block
     if (ex)
     {
-        throw *ex;
+        throw std::move(*ex);
     }
 
     // Progress endpoint for clients to poll, if the submit was successful.
@@ -889,7 +889,7 @@ void NVMeSubsystem::createVolumeFinished(std::string progId, nvme_ex_ptr ex,
 
         if (ex)
         {
-            prog->createFailure(ex);
+            prog->createFailure(*ex);
             return;
         }
 
@@ -898,7 +898,7 @@ void NVMeSubsystem::createVolumeFinished(std::string progId, nvme_ex_ptr ex,
         {
             vol = addVolume(ns);
         }
-        catch (nvme_ex_ptr e)
+        catch (NVMeSdBusPlusError &e)
         {
             prog->createFailure(e);
             return;
@@ -948,7 +948,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
 
     if (ex)
     {
-        throw *ex;
+        throw std::move(*ex);
     }
 
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
@@ -985,7 +985,7 @@ void NVMeSubsystem::addIdentifyNamespace(boost::asio::yield_context yield,
 
     if (ex)
     {
-        throw *ex;
+        throw std::move(*ex);
     }
 
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
@@ -1028,7 +1028,7 @@ void NVMeSubsystem::updateVolumes(boost::asio::yield_context yield)
 
     if (ex)
     {
-        throw *ex;
+        throw std::move(*ex);
     }
 
     std::vector<uint32_t> existing;

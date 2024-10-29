@@ -46,7 +46,7 @@ class NVMeCreateVolumeProgress : public NVMeProgress
     ~NVMeCreateVolumeProgress() override;
 
     void createSuccess(std::shared_ptr<NVMeVolume> volume);
-    void createFailure(nvme_ex_ptr e);
+    void createFailure(const NVMeSdBusPlusError &e);
 
     /* Returns the volume path if successful, or empty otherwise */
     std::string volumePath() const;

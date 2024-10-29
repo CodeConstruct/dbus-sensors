@@ -11,13 +11,15 @@ NVMeSdBusPlusError::NVMeSdBusPlusError(std::string_view desc) : desc(desc)
 }
 
 NVMeSdBusPlusError::NVMeSdBusPlusError(
-    std::shared_ptr<sdbusplus::exception_t> specific) : specific(specific)
+// NOLINTNEXTLINE(bugprone-throw-keyword-missing)
+    std::shared_ptr<sdbusplus::exception_t> &&specific) : specific(specific)
 {
     init();
 }
 
 NVMeSdBusPlusError::NVMeSdBusPlusError(
-    std::string_view desc, std::shared_ptr<sdbusplus::exception_t> specific) :
+    std::string_view desc, std::shared_ptr<sdbusplus::exception_t> &&specific) :
+// NOLINTNEXTLINE(bugprone-throw-keyword-missing)
     desc(desc), specific(specific)
 {
     init();
@@ -198,7 +200,7 @@ nvme_ex_ptr makeLibNVMeError(const std::error_code& err, int nvmeStatus,
                 desc = "Unknown libnvme error";
         }
         std::cerr << methodName << ":" << desc << std::endl;
-        return std::make_shared<NVMeSdBusPlusError>(desc, specific);
+        return std::make_shared<NVMeSdBusPlusError>(desc, std::move(specific));
     }
     // No Error
     return nullptr;
@@ -219,7 +221,7 @@ nvme_ex_ptr makeLibNVMeError(std::string_view msg)
 nvme_ex_ptr makeLibNVMeError(std::string_view desc,
                              std::shared_ptr<sdbusplus::exception_t> specific)
 {
-    return std::make_shared<NVMeSdBusPlusError>(desc, specific);
+    return std::make_shared<NVMeSdBusPlusError>(desc, std::move(specific));
 }
 
 /* Throws an appropriate error type for the given status from libnvme,
@@ -230,11 +232,11 @@ void checkLibNVMeError(const std::error_code& err, int nvmeStatus,
     auto e = makeLibNVMeError(err, nvmeStatus, methodName);
     if (e)
     {
-        throw *e;
+        throw std::move(*e);
     }
 }
 
-std::ostream& operator<<(std::ostream& o, nvme_ex_ptr ex)
+std::ostream& operator<<(std::ostream& o, const nvme_ex_ptr &ex)
 {
     if (ex)
     {

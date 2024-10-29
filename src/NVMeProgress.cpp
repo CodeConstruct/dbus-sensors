@@ -66,12 +66,12 @@ void NVMeCreateVolumeProgress::createSuccess(std::shared_ptr<NVMeVolume> volume)
     complete();
 }
 
-void NVMeCreateVolumeProgress::createFailure(nvme_ex_ptr e)
+void NVMeCreateVolumeProgress::createFailure(const NVMeSdBusPlusError &e)
 {
     failure = std::make_shared<CreateVolumeProgressFailure>(
         dynamic_cast<sdbusplus::bus_t&>(*conn), path.c_str());
-    failure->errorName(e->name());
-    failure->errorDescription(e->description());
+    failure->errorName(e.name());
+    failure->errorDescription(e.description());
     failure->emit_added();
     fail();
 }

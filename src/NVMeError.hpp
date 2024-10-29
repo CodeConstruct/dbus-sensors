@@ -9,15 +9,15 @@
 
 namespace CommonErr = sdbusplus::xyz::openbmc_project::Common::Error;
 
-class NVMeSdBusPlusError : public sdbusplus::exception_t
+class NVMeSdBusPlusError final : public sdbusplus::exception_t
 {
   public:
     // In general makeLibNVMeError() should be used rather than raw
     // constructors.
-    NVMeSdBusPlusError(std::string_view desc);
-    NVMeSdBusPlusError(std::shared_ptr<sdbusplus::exception_t> specific);
+    explicit NVMeSdBusPlusError(std::string_view desc);
+    explicit NVMeSdBusPlusError(std::shared_ptr<sdbusplus::exception_t> &&specific);
     NVMeSdBusPlusError(std::string_view desc,
-                       std::shared_ptr<sdbusplus::exception_t> specific);
+                       std::shared_ptr<sdbusplus::exception_t> &&specific);
 
     const char* what() const noexcept override;
     const char* name() const noexcept override;
@@ -51,4 +51,4 @@ nvme_ex_ptr makeLibNVMeError(std::string_view desc,
 void checkLibNVMeError(const std::error_code& err, int nvmeStatus,
                        const char* methodName);
 
-std::ostream& operator<<(std::ostream& o, nvme_ex_ptr ex);
+std::ostream& operator<<(std::ostream& o, const nvme_ex_ptr &ex);

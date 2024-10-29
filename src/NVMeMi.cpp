@@ -1585,7 +1585,7 @@ size_t NVMeMi::getBlockSize(nvme_mi_ctrl_t ctrl, size_t lbaFormat)
     auto e = makeLibNVMeError(errno, status, "getBlockSize");
     if (e)
     {
-        throw e;
+        throw std::move(*e);
     }
 
     std::cout << "nlbaf " << (int)id.nlbaf << "lbaf " << (int)lbaFormat
@@ -1624,9 +1624,9 @@ void NVMeMi::createNamespace(
         {
             blockSize = self->getBlockSize(ctrl, lbaFormat);
         }
-        catch (nvme_ex_ptr e)
+        catch (NVMeSdBusPlusError &e)
         {
-            submittedCb(e);
+            submittedCb(std::make_shared<NVMeSdBusPlusError>(e));
             return;
         }
 
