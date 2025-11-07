@@ -22,7 +22,7 @@ void MCTPReactor::deferSetup(const std::shared_ptr<MCTPDevice>& dev)
     debug("Deferring setup for MCTP device at [ {MCTP_DEVICE} ]", "MCTP_DEVICE",
           dev->describe());
 
-    deferred.emplace(dev);
+    states[dev->id()] = MCTPDeviceState::Unassigned;
 }
 
 void MCTPReactor::untrackEndpoint(const std::shared_ptr<MCTPEndpoint>& ep)
@@ -35,6 +35,7 @@ void MCTPReactor::trackEndpoint(const std::shared_ptr<MCTPEndpoint>& ep)
     info("Added MCTP endpoint to device: [ {MCTP_ENDPOINT} ]", "MCTP_ENDPOINT",
          ep->describe());
 
+    states[ep->device()->id()] = MCTPDeviceState::Assigned;
     ep->subscribe(
         // Degraded
         [](const std::shared_ptr<MCTPEndpoint>& ep) {
@@ -57,6 +58,10 @@ void MCTPReactor::trackEndpoint(const std::shared_ptr<MCTPEndpoint>& ep)
                 if (self->devices.contains(ep->device()))
                 {
                     self->deferSetup(ep->device());
+                }
+                else
+                {
+                    self->states.erase(ep->device()->id());
                 }
             }
             else
@@ -137,10 +142,12 @@ void MCTPReactor::setupEndpoint(const std::shared_ptr<MCTPDevice>& dev)
 
 void MCTPReactor::tick()
 {
-    auto toSetup = std::exchange(deferred, {});
-    for (const auto& entry : toSetup)
+    for (const auto& entry : devices)
     {
-        setupEndpoint(entry);
+        if (states[entry.second->id()] == MCTPDeviceState::Unassigned)
+        {
+            setupEndpoint(entry.second);
+        }
     }
 }
 
@@ -154,6 +161,7 @@ void MCTPReactor::manageMCTPDevice(const std::string& path,
 
     try
     {
+        states[device->id()] = MCTPDeviceState::Unmanaged;
         devices.add(path, device);
         debug("MCTP device inventory added at '{INVENTORY_PATH}'",
               "INVENTORY_PATH", path);
@@ -202,8 +210,6 @@ void MCTPReactor::unmanageMCTPDevice(const std::string& path)
 
     debug("MCTP device inventory removed at '{INVENTORY_PATH}'",
           "INVENTORY_PATH", path);
-
-    deferred.erase(device);
 
     // Remove the device from the repository before notifying the device itself
     // of removal so we don't defer its setup
